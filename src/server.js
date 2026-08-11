@@ -13,15 +13,15 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const PORT = process.env.PORT || 3000;
 
-// Daftar nada dering yang diizinkan (file ada di /public/sounds/)
+// Daftar nada dering yang diizinkan (Disesuaikan dengan nama folder /Sounds/)
 const ALLOWED_RINGTONES = [
-  '/sounds/ringtone1.mp3',
-  '/sounds/ringtone2.mp3',
-  '/sounds/ringtone3.mp3',
+  '/Sounds/ringtone1.mp3',
+  '/Sounds/ringtone2.mp3',
+  '/Sounds/ringtone3.mp3',
 ];
 const DEFAULT_RINGTONE = ALLOWED_RINGTONES[0];
 
-// Endpoint untuk scan QR WhatsApp dari browser (tidak butuh DB, jadi ditaruh sebelum middleware DB)
+// Endpoint untuk scan QR WhatsApp
 app.get('/api/bot/qr', (req, res) => {
   const { ready, qrDataUrl } = getBotStatus();
   if (ready) return res.send('Bot WhatsApp sudah terhubung ✅ Tidak perlu scan lagi.');
@@ -85,19 +85,16 @@ app.post('/api/auth/register', async (req, res) => {
 
     const resolvedNoWa = no_wa || null;
     const resolvedRelasi = preferensi === 'nomor_wa' ? (relasi || null) : null;
-    // Default ringtone hanya jika preferensi nada_dering; nomor_wa tidak butuh ringtone
     const resolvedRingtone = preferensi === 'nada_dering'
       ? (ALLOWED_RINGTONES.includes(selected_ringtone) ? selected_ringtone : DEFAULT_RINGTONE)
       : null;
 
-    // Ganti password_plain menjadi password (atau isi keduanya jika ada dua kolom)
-// Gantilah query INSERT di server.js menjadi seperti ini:
-const result = await client.query(
-  `INSERT INTO users (npm, nama, email, password, role, no_wa, preferensi, relasi, selected_ringtone)
-   VALUES ($1, $2, $3, $4, 'user', $5, $6, $7, $8)
-   RETURNING id_user`,
-  [npm, nama, email, password, resolvedNoWa, preferensi, resolvedRelasi, resolvedRingtone]
-);
+    const result = await client.query(
+      `INSERT INTO users (npm, nama, email, password, role, no_wa, preferensi, relasi, selected_ringtone)
+       VALUES ($1, $2, $3, $4, 'user', $5, $6, $7, $8)
+       RETURNING id_user`,
+      [npm, nama, email, password, resolvedNoWa, preferensi, resolvedRelasi, resolvedRingtone]
+    );
     const idUser = result.rows[0].id_user;
     return res.status(201).json({ message: 'Registrasi berhasil', id_user: idUser });
   } catch (err) {
@@ -117,14 +114,13 @@ app.post('/api/auth/login', async (req, res) => {
   let client;
   try {
     client = await getConnection();
-    // Gantilah query SELECT di server.js menjadi seperti ini:
-   const result = await client.query(
-   `SELECT id_user AS "id_user", npm AS "npm", nama AS "nama", email AS "email",
-          role AS "role", no_wa AS "no_wa", preferensi AS "preferensi", relasi AS "relasi",
-          COALESCE(selected_ringtone, '${DEFAULT_RINGTONE}') AS "selected_ringtone"
-   FROM users WHERE email = $1 AND password = $2`,
-  [email, password]
-   );
+    const result = await client.query(
+      `SELECT id_user AS "id_user", npm AS "npm", nama AS "nama", email AS "email",
+              role AS "role", no_wa AS "no_wa", preferensi AS "preferensi", relasi AS "relasi",
+              COALESCE(selected_ringtone, '${DEFAULT_RINGTONE}') AS "selected_ringtone"
+       FROM users WHERE email = $1 AND password = $2`,
+      [email, password]
+    );
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Email atau password salah' });
     }
@@ -222,7 +218,6 @@ app.patch('/api/tasks/:id/done', authRole('user'), async (req, res) => {
       return res.json({ message: 'Sudah selesai', id_tugas: idTugas, status: 'selesai' });
     }
 
-    // Upsert menggunakan UPSERT PostgreSQL (ON CONFLICT)
     await client.query(
       `INSERT INTO user_task_status (id_user, id_tugas, status, updated_at)
        VALUES ($1, $2, 'selesai', CURRENT_TIMESTAMP)
@@ -239,6 +234,7 @@ app.patch('/api/tasks/:id/done', authRole('user'), async (req, res) => {
   }
 });
 
+// FIX GANTI PASSWORD: Mengubah password_plain menjadi password
 app.patch('/api/auth/change-password', authRole('user', 'admin'), async (req, res) => {
   const { password } = req.body;
   if (!password) {
@@ -249,7 +245,7 @@ app.patch('/api/auth/change-password', authRole('user', 'admin'), async (req, re
   try {
     client = await getConnection();
     await client.query(
-      `UPDATE users SET password_plain = $1 WHERE id_user = $2`,
+      `UPDATE users SET password = $1 WHERE id_user = $2`,
       [password, res.locals.idUser]
     );
     return res.json({ message: 'Password diperbarui' });
@@ -261,7 +257,8 @@ app.patch('/api/auth/change-password', authRole('user', 'admin'), async (req, re
   }
 });
 
-app.patch('/api/auth/change-email', authRole('user'), async (req, res) => {
+// FIX GANTI EMAIL
+app.patch('/api/auth/change-email', authRole('user', 'admin'), async (req, res) => {
   const { email } = req.body;
   if (!email) {
     return res.status(400).json({ error: 'email wajib diisi' });
@@ -290,7 +287,7 @@ app.patch('/api/auth/change-email', authRole('user'), async (req, res) => {
   }
 });
 
-app.patch('/api/auth/preferences', authRole('user'), async (req, res) => {
+app.patch('/api/auth/preferences', authRole('user', 'admin'), async (req, res) => {
   const { preferensi, no_wa, relasi, selected_ringtone } = req.body;
   if (!['nomor_wa', 'nada_dering'].includes(preferensi)) {
     return res.status(400).json({ error: 'preferensi harus nomor_wa atau nada_dering' });
@@ -342,7 +339,6 @@ async function start() {
     await initPool();
     console.log('Database connected successfully.');
     
-    // Memanggil bot WhatsApp jika variabel ENABLE_BOT bernilai true di .env
     if (process.env.ENABLE_BOT === 'true') {
       startBot();
       console.log('WhatsApp Bot service started.');
