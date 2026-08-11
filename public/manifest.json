@@ -1,0 +1,25 @@
+{
+  "name": "DeadLineHero",
+  "short_name": "DeadLineHero",
+  "description": "Pemusat tugas, UTS, dan UAS kelas dengan pengingat deadline via WhatsApp Bot & Nada Dering.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF4ED",
+  "theme_color": "#E8674A",
+  "lang": "id",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

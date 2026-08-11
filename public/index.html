@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#E8674A" />
+  <title>DeadLineHero</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="auth-view" class="view">
+    <div class="auth-card">
+      <h1 class="brand">DeadLineHero</h1>
+      <p class="brand-sub">stay on top of every deadline</p>
+
+      <div class="tabs" role="tablist">
+        <button class="tab-btn active" data-tab="login" type="button">Masuk</button>
+        <button class="tab-btn" data-tab="register" type="button">Daftar</button>
+      </div>
+
+      <form id="login-form" class="auth-form" autocomplete="on">
+        <label>Email
+          <input type="email" name="email" required autocomplete="email" />
+        </label>
+        <label>Password
+          <input type="password" name="password" required autocomplete="current-password" />
+        </label>
+        <button type="submit" class="btn-primary">Masuk</button>
+      </form>
+
+      <form id="register-form" class="auth-form hidden" autocomplete="on">
+        <label>Nama
+          <input type="text" name="nama" required autocomplete="name" />
+        </label>
+        <label>NPM
+          <input type="text" name="npm" required autocomplete="off" />
+        </label>
+        <label>Email
+          <input type="email" name="email" required autocomplete="email" />
+        </label>
+        <label>Password
+          <input type="password" name="password" required autocomplete="new-password" />
+        </label>
+        <fieldset class="pref-fieldset">
+          <legend>Preferensi Pengingat</legend>
+          <label class="radio">
+            <input type="radio" name="preferensi" value="nada_dering" checked />
+            <span>Nada Dering</span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="preferensi" value="nomor_wa" />
+            <span>Nomor WhatsApp Orang Terdekat</span>
+          </label>
+        </fieldset>
+        <div id="wa-extra" class="hidden">
+          <label id="no-wa-field">
+            Nomor WhatsApp
+            <input type="tel" name="no_wa" placeholder="62xxx / 08xxx" autocomplete="tel" />
+          </label>
+          <fieldset class="pref-fieldset">
+            <legend>Hubungan dengan Kontak</legend>
+            <label class="radio">
+              <input type="radio" name="relasi" value="pacar" checked />
+              <span>Pacar</span>
+            </label>
+            <label class="radio">
+              <input type="radio" name="relasi" value="keluarga" />
+              <span>Keluarga</span>
+            </label>
+            <label class="radio">
+              <input type="radio" name="relasi" value="sahabat" />
+              <span>Sahabat</span>
+            </label>
+          </fieldset>
+        </div>
+        <div id="ringtone-extra" class="hidden">
+          <label>Pilih Nada Dering
+            <select name="selected_ringtone">
+              <option value="/sounds/ringtone1.mp3">Bruno Mars - Risk It All</option>
+              <option value="/sounds/ringtone2.mp3">Cameron Boyce - OBH Combi Sachet</option>
+              <option value="/sounds/ringtone3.mp3">Sal Priadi - Foto Kita Blur</option>
+            </select>
+          </label>
+        </div>
+        <button type="submit" class="btn-primary">Daftar</button>
+      </form>
+
+      <p id="auth-msg" class="msg"></p>
+    </div>
+  </div>
+
+  <div id="app-view" class="view hidden">
+    <header class="header-bar">
+      <div class="header-inner">
+        <div class="profile-wrap">
+          <button id="profile-trigger" class="profile-chip" type="button" aria-haspopup="true" aria-expanded="false">
+            <div class="avatar" id="user-avatar">U</div>
+            <div class="profile-info">
+              <span id="user-nama" class="profile-nama">Nama</span>
+              <span id="user-role" class="profile-role">user</span>
+            </div>
+          </button>
+          <div id="menu-dropdown" class="menu-dropdown hidden" role="menu">
+            <button type="button" data-action="change-password" role="menuitem">🔑 Ganti Password</button>
+            <button type="button" data-action="change-email" id="menu-change-email" role="menuitem">✉️ Ganti Email</button>
+            <button type="button" data-action="preferences" id="menu-preferences" role="menuitem">🔔 Preferensi Pengingat</button>
+            <button type="button" data-action="toggle-theme" role="menuitem">🌙 Dark Mode</button>
+            <div class="menu-sep"></div>
+            <button type="button" data-action="logout" class="danger" role="menuitem">🚪 Logout</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <div class="card">
+        <div class="tabs task-tabs" role="tablist">
+          <button class="tab-btn active" data-task-tab="Tugas" type="button">Tugas</button>
+          <button class="tab-btn" data-task-tab="UTS" type="button">UTS</button>
+          <button class="tab-btn" data-task-tab="UAS" type="button">UAS</button>
+        </div>
+        <ul id="task-list" class="task-list" aria-live="polite"></ul>
+        <p id="empty-msg" class="empty hidden">Belum ada tugas di kategori ini.</p>
+      </div>
+
+      <section id="admin-panel" class="admin-panel hidden">
+        <h2>Input Tugas Baru</h2>
+        <form id="task-form" class="task-form">
+          <label>Judul
+            <input type="text" name="judul" required />
+          </label>
+          <label>Deskripsi
+            <textarea name="deskripsi" rows="3"></textarea>
+          </label>
+          <label>Kategori
+            <select name="kategori" required>
+              <option value="Tugas">Tugas</option>
+              <option value="UTS">UTS</option>
+              <option value="UAS">UAS</option>
+            </select>
+          </label>
+          <label id="sumber-field">Sumber Web
+            <select name="sumber_web">
+              <option value="Vclass">Vclass</option>
+              <option value="Ilab">Ilab</option>
+              <option value="Praktikum">Praktikum</option>
+            </select>
+          </label>
+          <label>Deadline
+            <input type="datetime-local" step="1" name="deadline" required />
+          </label>
+          <button type="submit" class="btn-primary">Tambah Tugas</button>
+        </form>
+        <p id="task-msg" class="msg"></p>
+      </section>
+
+      <section id="modal-host"></section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-view="tasks" type="button">📋 Daftar</button>
+      <button class="nav-item" data-view="admin" id="nav-admin" type="button">➕ Input</button>
+      <button class="nav-item" data-view="profile" type="button">👤 Profil</button>
+    </nav>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
