@@ -13,15 +13,16 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const PORT = process.env.PORT || 3000;
 
-// Daftar nada dering yang diizinkan (Disesuaikan dengan nama folder /Sounds/)
 const ALLOWED_RINGTONES = [
   '/Sounds/ringtone1.mp3',
   '/Sounds/ringtone2.mp3',
   '/Sounds/ringtone3.mp3',
+  '/sounds/ringtone1.mp3',
+  '/sounds/ringtone2.mp3',
+  '/sounds/ringtone3.mp3',
 ];
-const DEFAULT_RINGTONE = ALLOWED_RINGTONES[0];
+const DEFAULT_RINGTONE = '/Sounds/ringtone1.mp3';
 
-// Endpoint untuk scan QR WhatsApp
 app.get('/api/bot/qr', (req, res) => {
   const { ready, qrDataUrl } = getBotStatus();
   if (ready) return res.send('Bot WhatsApp sudah terhubung ✅ Tidak perlu scan lagi.');
@@ -85,9 +86,12 @@ app.post('/api/auth/register', async (req, res) => {
 
     const resolvedNoWa = no_wa || null;
     const resolvedRelasi = preferensi === 'nomor_wa' ? (relasi || null) : null;
-    const resolvedRingtone = preferensi === 'nada_dering'
-      ? (ALLOWED_RINGTONES.includes(selected_ringtone) ? selected_ringtone : DEFAULT_RINGTONE)
-      : null;
+    let resolvedRingtone = null;
+    if (preferensi === 'nada_dering') {
+      resolvedRingtone = ALLOWED_RINGTONES.includes(selected_ringtone) 
+        ? selected_ringtone.replace('/sounds/', '/Sounds/') 
+        : DEFAULT_RINGTONE;
+    }
 
     const result = await client.query(
       `INSERT INTO users (npm, nama, email, password, role, no_wa, preferensi, relasi, selected_ringtone)
@@ -124,7 +128,13 @@ app.post('/api/auth/login', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Email atau password salah' });
     }
-    return res.json({ message: 'Login berhasil', user: result.rows[0] });
+    
+    let userData = result.rows[0];
+    if (userData.selected_ringtone) {
+      userData.selected_ringtone = userData.selected_ringtone.replace('/sounds/', '/Sounds/');
+    }
+    
+    return res.json({ message: 'Login berhasil', user: userData });
   } catch (err) {
     console.error('LOGIN ERR:', sanitizeError(err));
     return res.status(500).json({ error: 'Terjadi kesalahan server' });
@@ -199,7 +209,7 @@ app.post('/api/tasks', authRole('admin'), async (req, res) => {
   }
 });
 
-app.patch('/api/tasks/:id/done', authRole('user'), async (req, res) => {
+app.patch('/api/tasks/:id/done', authRole('user', 'admin'), async (req, res) => {
   const idTugas = Number(req.params.id);
   if (isNaN(idTugas)) {
     return res.status(400).json({ error: 'ID tugas tidak valid' });
@@ -234,7 +244,6 @@ app.patch('/api/tasks/:id/done', authRole('user'), async (req, res) => {
   }
 });
 
-// FIX GANTI PASSWORD: Mengubah password_plain menjadi password
 app.patch('/api/auth/change-password', authRole('user', 'admin'), async (req, res) => {
   const { password } = req.body;
   if (!password) {
@@ -257,7 +266,6 @@ app.patch('/api/auth/change-password', authRole('user', 'admin'), async (req, re
   }
 });
 
-// FIX GANTI EMAIL
 app.patch('/api/auth/change-email', authRole('user', 'admin'), async (req, res) => {
   const { email } = req.body;
   if (!email) {
@@ -307,9 +315,12 @@ app.patch('/api/auth/preferences', authRole('user', 'admin'), async (req, res) =
     client = await getConnection();
     const resolvedNoWa = preferensi === 'nomor_wa' ? no_wa : null;
     const resolvedRelasi = preferensi === 'nomor_wa' ? (relasi || null) : null;
-    const resolvedRingtone = preferensi === 'nada_dering'
-      ? (ALLOWED_RINGTONES.includes(selected_ringtone) ? selected_ringtone : DEFAULT_RINGTONE)
-      : null;
+    let resolvedRingtone = null;
+    if (preferensi === 'nada_dering') {
+      resolvedRingtone = ALLOWED_RINGTONES.includes(selected_ringtone) 
+        ? selected_ringtone.replace('/sounds/', '/Sounds/') 
+        : DEFAULT_RINGTONE;
+    }
 
     await client.query(
       `UPDATE users

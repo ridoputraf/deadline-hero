@@ -45,15 +45,47 @@
     }
   }
   function playRingtone(src) {
-    stopRingtone();
-    if (!src) return null;
-    const audio = new Audio(src);
-    audio.preload = 'auto';
-    activeAudio = audio;
-    audio.play().catch((err) => console.warn('Audio play blocked:', err.message));
-    audio.addEventListener('ended', () => { if (activeAudio === audio) activeAudio = null; });
-    return audio;
+  stopRingtone();
+  if (!src) {
+    alert('Pilih nada dering terlebih dahulu!');
+    return null;
   }
+
+  // Pastikan path diawali dengan slash dan sesuai dengan folder /Sounds/
+  let formattedSrc = src;
+  if (!formattedSrc.startsWith('/')) {
+    formattedSrc = '/' + formattedSrc;
+  }
+
+  const audio = new Audio(formattedSrc);
+  audio.preload = 'auto';
+  activeAudio = audio;
+
+  audio.play()
+    .then(() => {
+      console.log('Audio berhasil diputar:', formattedSrc);
+    })
+    .catch((err) => {
+      console.error('Audio play error:', err);
+      alert('Gagal memutar audio (' + err.message + '). Pastikan file /Sounds/ tersedia di server.');
+    });
+
+  audio.addEventListener('ended', () => { 
+    if (activeAudio === audio) activeAudio = null; 
+  });
+  
+  return audio;
+}
+
+// Fungsi helper yang dipanggil saat tombol "Tes Suara" diklik
+function testSelectedRingtone() {
+  // Ambil nilai ringtone dari radio button atau dropdown yang sedang dipilih user
+  const selectedElement = document.querySelector('input[name="selected_ringtone"]:checked') 
+                       || document.getElementById('selected_ringtone');
+  
+  const ringtonePath = selectedElement ? selectedElement.value : '/Sounds/ringtone1.mp3';
+  playRingtone(ringtonePath);
+}
 
   /* ===== API ===== */
   async function api(path, opts = {}) {
