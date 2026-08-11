@@ -541,17 +541,34 @@ function testSelectedRingtone() {
 
     // Dynamic visibility: jika ada field `selected_ringtone` + `preferensi`,
     // tampilkan/sembunyikan row ringtone berdasarkan nilai preferensi.
+   // Dynamic visibility: tampilkan/sembunyikan field berdasarkan preferensi
     const prefSel = $('select[name="preferensi"]', modal);
-    const ringLabel = (() => {
-      const sel = $('select[name="selected_ringtone"]', modal);
-      return sel ? sel.closest('label') : null;
-    })();
-    if (prefSel && ringLabel) {
-      const sync = () => {
-        ringLabel.classList.toggle('hidden', prefSel.value !== 'nada_dering');
+    if (prefSel) {
+      const getLabel = (name) => {
+        const el = $(`[name="${name}"]`, modal);
+        return el ? el.closest('label') : null;
       };
-      sync();
-      prefSel.addEventListener('change', sync);
+
+      const ringLabel = getLabel('selected_ringtone');
+      const waLabel = getLabel('no_wa');
+      const relasiLabel = getLabel('relasi');
+
+      const syncModalVisibility = () => {
+        const isNadaDering = prefSel.value === 'nada_dering';
+
+        // Tampilkan ringtone jika 'nada_dering', sembunyikan jika 'nomor_wa'
+        if (ringLabel) ringLabel.classList.toggle('hidden', !isNadaDering);
+
+        // Sembunyikan WA & Relasi jika 'nada_dering', tampilkan jika 'nomor_wa'
+        if (waLabel) waLabel.classList.toggle('hidden', isNadaDering);
+        if (relasiLabel) relasiLabel.classList.toggle('hidden', isNadaDering);
+      };
+
+      // Jalankan saat modal pertama kali muncul
+      syncModalVisibility();
+
+      // Jalankan saat user mengubah dropdown pilihan
+      prefSel.addEventListener('change', syncModalVisibility);
     }
 
     form.addEventListener('submit', async (e) => {
