@@ -4,10 +4,11 @@
   const API = '';
 
   // Daftar nada dering (file ada di /public/sounds/, disajikan di /sounds/...)
+ // Daftar nada dering (file ada di /public/Sounds/)
   const RINGTONE_OPTIONS = [
-    { value: '/sounds/ringtone1.mp3', label: 'Bruno Mars - Risk It All' },
-    { value: '/sounds/ringtone2.mp3', label: 'Cameron Boyce - OBH Combi Sachet' },
-    { value: '/sounds/ringtone3.mp3', label: 'Sal Priadi - Foto Kita Blur' },
+    { value: '/Sounds/ringtone1.mp3', label: 'Bruno Mars - Risk It All' },
+    { value: '/Sounds/ringtone2.mp3', label: 'Cameron Boyce - OBH Combi Sachet' },
+    { value: '/Sounds/ringtone3.mp3', label: 'Sal Priadi - Foto Kita Blur' },
   ];
   const DEFAULT_RINGTONE = RINGTONE_OPTIONS[0].value;
 
@@ -44,38 +45,45 @@
       activeAudio = null;
     }
   }
-  function playRingtone(src) {
-  stopRingtone();
-  if (!src) {
-    alert('Pilih nada dering terlebih dahulu!');
-    return null;
-  }
+ function playRingtone(src) {
+    stopRingtone();
+    if (!src) {
+      alert('Pilih nada dering terlebih dahulu!');
+      return null;
+    }
 
-  // Pastikan path diawali dengan slash dan sesuai dengan folder /Sounds/
-  let formattedSrc = src;
-  if (!formattedSrc.startsWith('/')) {
-    formattedSrc = '/' + formattedSrc;
-  }
+    // Ubah ke string & bersihkan spasi
+    let formattedSrc = String(src).trim();
 
-  const audio = new Audio(formattedSrc);
-  audio.preload = 'auto';
-  activeAudio = audio;
+    // Pastikan diawali dengan slash /
+    if (!formattedSrc.startsWith('/')) {
+      formattedSrc = '/' + formattedSrc;
+    }
 
-  audio.play()
-    .then(() => {
-      console.log('Audio berhasil diputar:', formattedSrc);
-    })
-    .catch((err) => {
-      console.error('Audio play error:', err);
-      alert('Gagal memutar audio (' + err.message + '). Pastikan file /Sounds/ tersedia di server.');
+    // PAKSA ganti /sounds/ menjadi /Sounds/ (case sensitivity fix untuk Linux Railway)
+    formattedSrc = formattedSrc.replace(/\/sounds\//g, '/Sounds/');
+
+    console.log('Memutar audio dari path:', formattedSrc);
+
+    const audio = new Audio(formattedSrc);
+    audio.preload = 'auto';
+    activeAudio = audio;
+
+    audio.play()
+      .then(() => {
+        console.log('Audio berhasil diputar:', formattedSrc);
+      })
+      .catch((err) => {
+        console.error('Audio play error:', err);
+        alert('Gagal memutar audio (' + err.message + '). Path: ' + formattedSrc);
+      });
+
+    audio.addEventListener('ended', () => { 
+      if (activeAudio === audio) activeAudio = null; 
     });
-
-  audio.addEventListener('ended', () => { 
-    if (activeAudio === audio) activeAudio = null; 
-  });
-  
-  return audio;
-}
+    
+    return audio;
+  }
 
 // Fungsi helper yang dipanggil saat tombol "Tes Suara" diklik
 function testSelectedRingtone() {
