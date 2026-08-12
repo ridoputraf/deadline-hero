@@ -31,13 +31,39 @@
   }
   applyTheme(localStorage.getItem('dlh-theme') || 'light');
 
-  /* ===== Autoplay policy: audio hanya boleh play setelah user interact ===== */
+  /* ===== Autoplay policy: audio hanya boleh play setelah user interact =====
+   * Selama user belum pernah berinteraksi dengan halaman (klik/keydown),
+   * browser modern akan memblokir audio.play() secara otomatis.
+   * Kita simpan "pemicu yang tertunda" (pendingRingtone) di state global,
+   * lalu memutarnya begitu interaksi pertama user terdeteksi.
+   */
   let userInteracted = false;
-  window.addEventListener('pointerdown', () => { userInteracted = true; }, { once: true });
-  window.addEventListener('keydown', () => { userInteracted = true; }, { once: true });
+  let pendingRingtone = null; // { src, id, judul } — menunggu interaksi pertama user
 
-  /* ===== Audio engine (Web Audio API via <audio> element) ===== */
+  function markInteracted() {
+    if (userInteracted) return;
+    userInteracted = true;
+    window.removeEventListener('pointerdown', markInteracted);
+    window.removeEventListener('keydown', markInteracted);
+
+    if (pendingRingtone) {
+      const { src, id, judul } = pendingRingtone;
+      pendingRingtone = null;
+      playRingtone(src);
+      markRung(id);
+      toast(`⏰ Pengingat: ${judul}`);
+    }
+  }
+  window.addEventListener('pointerdown', markInteracted);
+  window.addEventListener('keydown', markInteracted);
+
+  /* ===== Audio engine (via elemen <audio>) =====
+   * Instance audio yang sedang aktif disimpan di variabel `activeAudio` (state global
+   * modul ini) supaya bisa dihentikan kapan saja dari fungsi lain, mis. saat
+   * tombol "Mark As Done" ditekan.
+   */
   let activeAudio = null;
+
   function stopRingtone() {
     if (activeAudio) {
       activeAudio.pause();
@@ -45,10 +71,11 @@
       activeAudio = null;
     }
   }
- function playRingtone(src) {
+
+  function playRingtone(src) {
     stopRingtone();
     if (!src) {
-      alert('Pilih nada dering terlebih dahulu!');
+      toast('Pilih nada dering terlebih dahulu!');
       return null;
     }
 
@@ -63,25 +90,21 @@
     // PAKSA ganti /sounds/ menjadi /Sounds/ (case sensitivity fix untuk Linux Railway)
     formattedSrc = formattedSrc.replace(/\/sounds\//g, '/Sounds/');
 
-    console.log('Memutar audio dari path:', formattedSrc);
-
     const audio = new Audio(formattedSrc);
     audio.preload = 'auto';
     activeAudio = audio;
 
-    audio.play()
-      .then(() => {
-        console.log('Audio berhasil diputar:', formattedSrc);
-      })
-      .catch((err) => {
-        console.error('Audio play error:', err);
-        alert('Gagal memutar audio (' + err.message + '). Path: ' + formattedSrc);
-      });
-
-    audio.addEventListener('ended', () => { 
-      if (activeAudio === audio) activeAudio = null; 
+    // Tangani kebijakan autoplay browser secara graceful: jika diblokir,
+    // cukup log & beri tahu lewat toast, tanpa menghentikan alur aplikasi.
+    audio.play().catch((err) => {
+      console.warn('Audio diblokir/gagal diputar:', err.message);
+      toast('Nada dering diblokir browser, klik layar untuk mengaktifkan suara.');
     });
-    
+
+    audio.addEventListener('ended', () => {
+      if (activeAudio === audio) activeAudio = null;
+    });
+
     return audio;
   }
 
@@ -261,6 +284,7 @@ function testSelectedRingtone() {
     const list = $('#task-list');
     const empty = $('#empty-msg');
     const items = state.tasks[state.activeTab] || [];
+    const isAdmin = state.user && state.user.role === 'admin';
 
     list.innerHTML = '';
     empty.classList.toggle('hidden', items.length > 0);
@@ -275,9 +299,25 @@ function testSelectedRingtone() {
         ? `<span class="tag ${t.sumber.toLowerCase()}">${escapeHtml(t.sumber)}</span>` : '';
       const deskripsi = t.deskripsi
         ? `<div class="task-desc">${escapeHtml(t.deskripsi)}</div>` : '';
-      const doneBtn = state.activeTab === 'Tugas'
-        ? `<button class="btn-done ${done ? 'done' : ''}" data-id="${t.id}" type="button" ${done ? 'disabled' : ''}>${done ? 'Selesai ✓' : 'Mark As Done'}</button>`
-        : '';
+
+      let actionBtn = '';
+      if (state.activeTab === 'Tugas') {
+        if (isAdmin) {
+          // Admin tidak menandai tugas selesai sendiri, cukup melihat rekap pengerjaan mahasiswa
+          actionBtn = `<button class="btn-detail" data-id="${t.id}" data-judul="${escapeHtml(t.judul)}" type="button">Detail</button>`;
+        } else {
+          const deadlineMs = new Date(t.deadline).getTime();
+          const isExpired = !isNaN(deadlineMs) && deadlineMs < Date.now();
+
+          if (done) {
+            actionBtn = `<button class="btn-done done" type="button" disabled>Selesai ✓</button>`;
+          } else if (isExpired) {
+            actionBtn = `<button class="btn-done missed" type="button" disabled>Terlewat</button>`;
+          } else {
+            actionBtn = `<button class="btn-done" data-id="${t.id}" type="button">Mark As Done</button>`;
+          }
+        }
+      }
 
       li.innerHTML = `
         <div class="task-body">
@@ -289,17 +329,87 @@ function testSelectedRingtone() {
           </div>
           ${deskripsi}
         </div>
-        ${doneBtn}
+        ${actionBtn}
       `;
       list.appendChild(li);
     }
 
-    $$('.btn-done', list).forEach((btn) => {
+    $$('.btn-done[data-id]', list).forEach((btn) => {
       btn.addEventListener('click', () => toggleDone(Number(btn.dataset.id)));
+    });
+
+    $$('.btn-detail', list).forEach((btn) => {
+      btn.addEventListener('click', () => openRecapModal(Number(btn.dataset.id), btn.dataset.judul));
     });
   }
 
+  /* ===== Modal Rekapitulasi (khusus Admin) ===== */
+  async function openRecapModal(idTugas, judul) {
+    const host = $('#modal-host');
+    host.innerHTML = '';
+    stopRingtone();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'modal recap-modal';
+    modal.innerHTML = `
+      <h3>Rekap: ${escapeHtml(judul)}</h3>
+      <p class="recap-loading">Memuat data rekapitulasi...</p>
+    `;
+
+    overlay.appendChild(modal);
+    host.appendChild(overlay);
+
+    const close = () => { host.innerHTML = ''; };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    try {
+      const data = await api(`/api/tasks/${idTugas}/recap`);
+      const sudah = Array.isArray(data.sudah) ? data.sudah : [];
+      const belum = Array.isArray(data.belum) ? data.belum : [];
+
+      modal.innerHTML = `
+        <h3>Rekap: ${escapeHtml(judul)}</h3>
+        <div class="recap-section">
+          <h4 class="recap-heading done-heading">✅ Sudah Mengerjakan (${sudah.length})</h4>
+          <ul class="recap-list">
+            ${sudah.length
+              ? sudah.map((u) => `<li>${escapeHtml(u.nama)}</li>`).join('')
+              : '<li class="recap-empty">Belum ada yang mengerjakan.</li>'}
+          </ul>
+        </div>
+        <div class="recap-section">
+          <h4 class="recap-heading pending-heading">⏳ Belum Mengerjakan (${belum.length})</h4>
+          <ul class="recap-list">
+            ${belum.length
+              ? belum.map((u) => `<li>${escapeHtml(u.nama)}</li>`).join('')
+              : '<li class="recap-empty">Semua mahasiswa sudah mengerjakan 🎉</li>'}
+          </ul>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary recap-close">Tutup</button>
+        </div>
+      `;
+      $('.recap-close', modal).addEventListener('click', close);
+    } catch (err) {
+      modal.innerHTML = `
+        <h3>Rekap: ${escapeHtml(judul)}</h3>
+        <p class="msg error">${escapeHtml(err.message)}</p>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary recap-close">Tutup</button>
+        </div>
+      `;
+      $('.recap-close', modal).addEventListener('click', close);
+    }
+  }
+
   async function toggleDone(id) {
+    // Hentikan nada dering yang mungkin sedang berbunyi untuk tugas ini
+    stopRingtone();
+    pendingRingtone = null;
+
     // Optimistic: flip state lokal + re-render langsung biar UI responsif
     const applyOptimistic = (status) => {
       for (const k of Object.keys(state.tasks)) {
@@ -400,6 +510,7 @@ function testSelectedRingtone() {
         break;
       case 'logout':
         stopDeadlineChecker();
+        pendingRingtone = null;
         state.user = null;
         $('#app-view').classList.add('hidden');
         $('#auth-view').classList.remove('hidden');
@@ -649,11 +760,19 @@ function testSelectedRingtone() {
         const inWindow = dl >= windowStart && dl <= windowEnd;
         if (!inWindow) continue;
         if (rung.has(t.id)) continue;
+
+        const src = u.selected_ringtone || DEFAULT_RINGTONE;
         if (!userInteracted) {
-          toast('⏰ Alarm aktif — klik halaman untuk dengar nada dering');
+          // Simpan pemicu yang tertunda di state global, siap diputar
+          // begitu ada interaksi pertama dari user (klik/keydown).
+          if (!pendingRingtone || pendingRingtone.id !== t.id) {
+            pendingRingtone = { src, id: t.id, judul: t.judul };
+            toast('⏰ Alarm aktif — klik halaman untuk dengar nada dering');
+          }
           return;
         }
-        playRingtone(u.selected_ringtone || DEFAULT_RINGTONE);
+
+        playRingtone(src);
         markRung(t.id);
         toast(`⏰ Pengingat: ${t.judul}`);
         triggered = true;

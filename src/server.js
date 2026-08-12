@@ -209,6 +209,60 @@ app.post('/api/tasks', authRole('admin'), async (req, res) => {
   }
 });
 
+app.get('/api/tasks/:id/recap', authRole('admin'), async (req, res) => {
+  const idTugas = Number(req.params.id);
+  if (isNaN(idTugas)) {
+    return res.status(400).json({ error: 'ID tugas tidak valid' });
+  }
+
+  let client;
+  try {
+    client = await getConnection();
+
+    const taskResult = await client.query(
+      `SELECT id_tugas AS "id_tugas", judul AS "judul" FROM tasks WHERE id_tugas = $1`,
+      [idTugas]
+    );
+    if (taskResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Tugas tidak ditemukan' });
+    }
+
+    // Mahasiswa (role user) yang sudah menekan Mark As Done untuk tugas ini
+    const sudahResult = await client.query(
+      `SELECT u.id_user AS "id_user", u.nama AS "nama"
+       FROM users u
+       JOIN user_task_status uts ON uts.id_user = u.id_user
+       WHERE uts.id_tugas = $1 AND uts.status = 'selesai' AND u.role = 'user'
+       ORDER BY u.nama ASC`,
+      [idTugas]
+    );
+
+    // Mahasiswa (role user) yang belum menekan Mark As Done untuk tugas ini
+    const belumResult = await client.query(
+      `SELECT u.id_user AS "id_user", u.nama AS "nama"
+       FROM users u
+       WHERE u.role = 'user'
+         AND u.id_user NOT IN (
+           SELECT id_user FROM user_task_status
+           WHERE id_tugas = $1 AND status = 'selesai'
+         )
+       ORDER BY u.nama ASC`,
+      [idTugas]
+    );
+
+    return res.json({
+      task: taskResult.rows[0],
+      sudah: sudahResult.rows,
+      belum: belumResult.rows,
+    });
+  } catch (err) {
+    console.error('GET RECAP ERR:', sanitizeError(err), 'id_tugas=', idTugas);
+    return res.status(500).json({ error: 'Terjadi kesalahan server' });
+  } finally {
+    if (client) client.release();
+  }
+});
+
 app.patch('/api/tasks/:id/done', authRole('user', 'admin'), async (req, res) => {
   const idTugas = Number(req.params.id);
   if (isNaN(idTugas)) {

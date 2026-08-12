@@ -630,6 +630,32 @@ h1, h2, h3, h4 {
   pointer-events: none;
 }
 
+.btn-done.missed {
+  background: var(--done-bg);
+  color: var(--done-text);
+  box-shadow: none;
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+
+.btn-detail {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  align-self: center;
+  border: 1.5px solid var(--border);
+  transition: background 0.18s, transform 0.1s, border-color 0.18s;
+}
+
+.btn-detail:hover { background: var(--accent); color: var(--accent-foreground); }
+.btn-detail:active { transform: scale(0.96); }
+
 .empty {
   text-align: center;
   color: var(--muted-foreground);
@@ -805,6 +831,58 @@ h1, h2, h3, h4 {
 .btn-primary.modal-btn {
   flex: 1;
   margin-top: 0;
+}
+
+/* ===== Modal Rekapitulasi (Admin) ===== */
+.recap-modal { max-width: 460px; }
+
+.recap-loading {
+  color: var(--muted-foreground);
+  font-style: italic;
+  padding: 24px 0;
+  text-align: center;
+  font-family: var(--font-sans);
+}
+
+.recap-section { margin-bottom: 20px; }
+.recap-section:last-of-type { margin-bottom: 8px; }
+
+.recap-heading {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.done-heading { color: var(--success); }
+.pending-heading { color: var(--destructive); }
+
+.recap-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.recap-list li {
+  background: var(--muted);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  font-family: var(--font-sans);
+  color: var(--card-foreground);
+}
+
+.recap-empty {
+  color: var(--muted-foreground) !important;
+  font-style: italic;
+  background: transparent !important;
+  padding: 4px 0 !important;
 }
 
 /* ===== Select + Preview Button Row (Settings modal) ===== */
