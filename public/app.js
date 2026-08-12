@@ -50,6 +50,7 @@
       const { src, id, judul } = pendingRingtone;
       pendingRingtone = null;
       playRingtone(src);
+      activeAlarmTaskId = id; // lacak tugas yang sedang membunyikan alarm (utk auto-stop, lihat scanDeadlineAlerts)
       markRung(id);
       toast(`⏰ Pengingat: ${judul}`);
     }
@@ -63,6 +64,10 @@
    * tombol "Mark As Done" ditekan.
    */
   let activeAudio = null;
+
+  // id_tugas yang sedang membunyikan alarm deadline saat ini (bukan "Tes Suara" biasa).
+  // Dipakai scanDeadlineAlerts() untuk tahu kapan harus auto-stop (deadline lewat / tugas selesai).
+  let activeAlarmTaskId = null;
 
   function stopRingtone() {
     if (activeAudio) {
@@ -282,6 +287,10 @@ function testSelectedRingtone() {
         if (Array.isArray(data[k])) state.tasks[k] = data[k];
       }
       renderTasks();
+      // (1) Cek alarm deadline setiap kali data tugas baru datang dari polling,
+      // supaya tugas baru (deadline < 1 jam) langsung terdeteksi & berbunyi
+      // tanpa menunggu interval checkerTimer terpisah (maks 30 detik).
+      scanDeadlineAlerts();
     } catch (err) {
       if (err.status === 401 || err.status === 403) {
         // Kredensial di localStorage sudah tidak valid (mis. akun dihapus) → paksa logout
@@ -298,7 +307,7 @@ function testSelectedRingtone() {
    * terlihat oleh admin/user lain tanpa perlu refresh manual.
    */
   let tasksPollTimer = null;
-  const TASKS_POLL_INTERVAL_MS = 8000;
+  const TASKS_POLL_INTERVAL_MS = 10000; // (4) 10 detik, dinaikkan dari 8 detik untuk kurangi beban render
 
   function startTasksPolling() {
     stopTasksPolling();
@@ -335,7 +344,41 @@ function testSelectedRingtone() {
     };
   }
 
+  /* ===== (4) Optimasi scrolling: tunda re-render DOM (innerHTML) selagi user
+   * sedang scroll, supaya polling (fetchTasks tiap 10 detik) tidak bikin
+   * scroll patah-patah. Render yang tertunda akan otomatis dijalankan begitu
+   * user berhenti scroll (debounce ~150ms tanpa event scroll baru).
+   */
+  let isScrolling = false;
+  let scrollEndTimer = null;
+  let renderTasksPending = false;
+
+  function handleScrollForRender() {
+    isScrolling = true;
+    clearTimeout(scrollEndTimer);
+    scrollEndTimer = setTimeout(() => {
+      isScrolling = false;
+      if (renderTasksPending) {
+        renderTasksPending = false;
+        renderTasksNow();
+      }
+    }, 150);
+  }
+  window.addEventListener('scroll', handleScrollForRender, { passive: true });
+
   function renderTasks() {
+    // Selagi scrolling, skip render DOM sekarang; tandai "pending" agar
+    // dijalankan begitu scroll selesai. Tidak berlaku untuk render yang
+    // dipicu langsung oleh aksi user (ganti tab, mark as done), tapi
+    // menunda sesaat tidak masalah karena isi tetap konsisten setelahnya.
+    if (isScrolling) {
+      renderTasksPending = true;
+      return;
+    }
+    renderTasksNow();
+  }
+
+  function renderTasksNow() {
     const list = $('#task-list');
     const empty = $('#empty-msg');
     const items = state.tasks[state.activeTab] || [];
@@ -494,6 +537,7 @@ function testSelectedRingtone() {
     // Hentikan nada dering yang mungkin sedang berbunyi untuk tugas ini
     stopRingtone();
     pendingRingtone = null;
+    activeAlarmTaskId = null;
 
     // Optimistic: flip state lokal + re-render langsung biar UI responsif
     const applyOptimistic = (status) => {
@@ -843,12 +887,46 @@ function testSelectedRingtone() {
     set.add(id);
     sessionStorage.setItem('dlh-rung', JSON.stringify([...set]));
   }
+  // Cek apakah tugas `id` yang sedang berbunyi masih valid untuk terus berbunyi:
+  // harus masih ada, belum "selesai", dan deadline-nya belum lewat (dl > now).
+  function isAlarmStillValid(id, now) {
+    for (const k of Object.keys(state.tasks)) {
+      for (const raw of state.tasks[k]) {
+        const t = normTask(raw);
+        if (t.id !== id) continue;
+        if (t.status === 'selesai') return false;
+        const dl = new Date(t.deadline).getTime();
+        if (isNaN(dl) || dl <= now) return false; // deadline sudah menyentuh 0 / "Terlewat"
+        return true;
+      }
+    }
+    return false; // tugas tidak ditemukan lagi (mis. dihapus admin)
+  }
+
   function scanDeadlineAlerts() {
     const u = state.user;
-    if (!u || u.preferensi !== 'nada_dering') return;
+
+    // (2) Pemisahan audio per-role: nada dering HANYA untuk role 'user'.
+    // Jika yang login Admin (atau belum login sama sekali), pastikan tidak ada audio alarm yang berbunyi.
+    if (!u || u.role !== 'user' || u.preferensi !== 'nada_dering') {
+      if (activeAlarmTaskId !== null) {
+        stopRingtone();
+        activeAlarmTaskId = null;
+      }
+      pendingRingtone = null;
+      return;
+    }
+
     const now = Date.now();
-    const windowStart = now - 60 * 60 * 1000;       // -1 jam
-    const windowEnd = now + 5 * 60 * 1000;           // +5 menit
+    const windowStart = now - 60 * 60 * 1000; // -1 jam
+
+    // (3) Jika tugas yang SEDANG berbunyi kini sudah "Terlewat" atau ditandai selesai,
+    // hentikan audio secara otomatis alih-alih terus berbunyi.
+    if (activeAlarmTaskId !== null && !isAlarmStillValid(activeAlarmTaskId, now)) {
+      stopRingtone();
+      activeAlarmTaskId = null;
+    }
+
     const rung = getRungSet();
     let triggered = false;
 
@@ -858,7 +936,10 @@ function testSelectedRingtone() {
         if (t.status === 'selesai') continue;
         const dl = new Date(t.deadline).getTime();
         if (isNaN(dl)) continue;
-        const inWindow = dl >= windowStart && dl <= windowEnd;
+
+        // (1)+(3) Trigger HANYA jika: deadline < 1 jam lagi (>= windowStart) DAN
+        // waktu belum lewat (dl > now, bukan <=) DAN tugas belum selesai (sudah difilter di atas).
+        const inWindow = dl >= windowStart && dl > now;
         if (!inWindow) continue;
         if (rung.has(t.id)) continue;
 
@@ -874,6 +955,7 @@ function testSelectedRingtone() {
         }
 
         playRingtone(src);
+        activeAlarmTaskId = t.id;
         markRung(t.id);
         toast(`⏰ Pengingat: ${t.judul}`);
         triggered = true;
@@ -891,6 +973,7 @@ function testSelectedRingtone() {
   function stopDeadlineChecker() {
     if (checkerTimer) { clearInterval(checkerTimer); checkerTimer = null; }
     stopRingtone();
+    activeAlarmTaskId = null;
   }
 
   /* ===== Utils ===== */
