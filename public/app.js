@@ -131,8 +131,35 @@ function testSelectedRingtone() {
     });
     let data;
     try { data = await res.json(); } catch (_) { data = {}; }
-    if (!res.ok) throw new Error(data.error || 'Request gagal');
+    if (!res.ok) {
+      const err = new Error(data.error || 'Request gagal');
+      err.status = res.status;
+      throw err;
+    }
     return data;
+  }
+
+  /* ===== Sesi (persist login lewat localStorage) =====
+   * Supaya user/admin tidak ter-logout saat refresh browser, data user yang
+   * sedang login disimpan di localStorage dan dipulihkan lagi saat halaman dimuat.
+   */
+  const SESSION_KEY = 'dlh-session';
+
+  function saveSession(user) {
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(user)); } catch (_) { /* abaikan, storage penuh/diblokir */ }
+  }
+
+  function clearSession() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (_) { /* no-op */ }
+  }
+
+  function loadSession() {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /* ===== Toast ===== */
@@ -180,6 +207,7 @@ function testSelectedRingtone() {
         body: JSON.stringify({ email: f.email.value.trim(), password: f.password.value }),
       });
       state.user = data.user;
+      saveSession(state.user);
       msg.textContent = '';
       enterApp();
     } catch (err) {
@@ -242,10 +270,11 @@ function testSelectedRingtone() {
 
     fetchTasks();
     startDeadlineChecker();
+    startTasksPolling();
   }
 
   /* ===== Tasks ===== */
-  async function fetchTasks() {
+  async function fetchTasks(silent = false) {
     try {
       const data = await api('/api/tasks');
       state.tasks = { Tugas: [], UTS: [], UAS: [] };
@@ -254,8 +283,34 @@ function testSelectedRingtone() {
       }
       renderTasks();
     } catch (err) {
-      toast(err.message);
+      if (err.status === 401 || err.status === 403) {
+        // Kredensial di localStorage sudah tidak valid (mis. akun dihapus) → paksa logout
+        toast('Sesi berakhir, silakan login kembali.');
+        handleMenuAction('logout');
+        return;
+      }
+      if (!silent) toast(err.message);
     }
+  }
+
+  /* ===== Polling: auto-refresh daftar tugas & modal rekap secara berkala =====
+   * Supaya perubahan dari user lain (mis. teman menekan "Mark As Done") langsung
+   * terlihat oleh admin/user lain tanpa perlu refresh manual.
+   */
+  let tasksPollTimer = null;
+  const TASKS_POLL_INTERVAL_MS = 8000;
+
+  function startTasksPolling() {
+    stopTasksPolling();
+    tasksPollTimer = setInterval(() => {
+      fetchTasks(true);
+      refreshOpenRecap();
+    }, TASKS_POLL_INTERVAL_MS);
+  }
+
+  function stopTasksPolling() {
+    if (tasksPollTimer) clearInterval(tasksPollTimer);
+    tasksPollTimer = null;
   }
 
   function normTask(raw) {
@@ -344,6 +399,41 @@ function testSelectedRingtone() {
   }
 
   /* ===== Modal Rekapitulasi (khusus Admin) ===== */
+  let currentRecapTaskId = null;
+  let currentRecapModalEl = null;
+
+  function renderRecapContent(modal, judul, sudah, belum) {
+    modal.innerHTML = `
+      <h3>Rekap: ${escapeHtml(judul)}</h3>
+      <div class="recap-section">
+        <h4 class="recap-heading done-heading">✅ Sudah Mengerjakan (${sudah.length})</h4>
+        <ul class="recap-list">
+          ${sudah.length
+            ? sudah.map((u) => `<li>${escapeHtml(u.nama)}</li>`).join('')
+            : '<li class="recap-empty">Belum ada yang mengerjakan.</li>'}
+        </ul>
+      </div>
+      <div class="recap-section">
+        <h4 class="recap-heading pending-heading">⏳ Belum Mengerjakan (${belum.length})</h4>
+        <ul class="recap-list">
+          ${belum.length
+            ? belum.map((u) => `<li>${escapeHtml(u.nama)}</li>`).join('')
+            : '<li class="recap-empty">Semua mahasiswa sudah mengerjakan 🎉</li>'}
+        </ul>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary recap-close">Tutup</button>
+      </div>
+    `;
+    $('.recap-close', modal).addEventListener('click', closeRecapModal);
+  }
+
+  function closeRecapModal() {
+    $('#modal-host').innerHTML = '';
+    currentRecapTaskId = null;
+    currentRecapModalEl = null;
+  }
+
   async function openRecapModal(idTugas, judul) {
     const host = $('#modal-host');
     host.innerHTML = '';
@@ -361,39 +451,18 @@ function testSelectedRingtone() {
 
     overlay.appendChild(modal);
     host.appendChild(overlay);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeRecapModal(); });
 
-    const close = () => { host.innerHTML = ''; };
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    currentRecapTaskId = idTugas;
+    currentRecapModalEl = modal;
 
     try {
       const data = await api(`/api/tasks/${idTugas}/recap`);
-      const sudah = Array.isArray(data.sudah) ? data.sudah : [];
-      const belum = Array.isArray(data.belum) ? data.belum : [];
-
-      modal.innerHTML = `
-        <h3>Rekap: ${escapeHtml(judul)}</h3>
-        <div class="recap-section">
-          <h4 class="recap-heading done-heading">✅ Sudah Mengerjakan (${sudah.length})</h4>
-          <ul class="recap-list">
-            ${sudah.length
-              ? sudah.map((u) => `<li>${escapeHtml(u.nama)}</li>`).join('')
-              : '<li class="recap-empty">Belum ada yang mengerjakan.</li>'}
-          </ul>
-        </div>
-        <div class="recap-section">
-          <h4 class="recap-heading pending-heading">⏳ Belum Mengerjakan (${belum.length})</h4>
-          <ul class="recap-list">
-            ${belum.length
-              ? belum.map((u) => `<li>${escapeHtml(u.nama)}</li>`).join('')
-              : '<li class="recap-empty">Semua mahasiswa sudah mengerjakan 🎉</li>'}
-          </ul>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn-secondary recap-close">Tutup</button>
-        </div>
-      `;
-      $('.recap-close', modal).addEventListener('click', close);
+      // Modal bisa saja sudah ditutup user sebelum request selesai
+      if (currentRecapTaskId !== idTugas) return;
+      renderRecapContent(modal, judul, data.sudah || [], data.belum || []);
     } catch (err) {
+      if (currentRecapTaskId !== idTugas) return;
       modal.innerHTML = `
         <h3>Rekap: ${escapeHtml(judul)}</h3>
         <p class="msg error">${escapeHtml(err.message)}</p>
@@ -401,7 +470,23 @@ function testSelectedRingtone() {
           <button type="button" class="btn-secondary recap-close">Tutup</button>
         </div>
       `;
-      $('.recap-close', modal).addEventListener('click', close);
+      $('.recap-close', modal).addEventListener('click', closeRecapModal);
+    }
+  }
+
+  // Dipanggil setiap siklus polling: kalau modal rekap sedang terbuka,
+  // perbarui isinya diam-diam tanpa mengganggu tampilan (tanpa loading spinner).
+  async function refreshOpenRecap() {
+    if (!currentRecapTaskId || !currentRecapModalEl) return;
+    const idTugas = currentRecapTaskId;
+    const judulEl = $('h3', currentRecapModalEl);
+    const judul = judulEl ? judulEl.textContent.replace(/^Rekap:\s*/, '') : '';
+    try {
+      const data = await api(`/api/tasks/${idTugas}/recap`);
+      if (currentRecapTaskId !== idTugas) return; // modal sudah ditutup/ganti selagi fetch
+      renderRecapContent(currentRecapModalEl, judul, data.sudah || [], data.belum || []);
+    } catch (_) {
+      // Gagal refresh diam-diam, biarkan data lama tetap tampil
     }
   }
 
@@ -510,7 +595,11 @@ function testSelectedRingtone() {
         break;
       case 'logout':
         stopDeadlineChecker();
+        stopTasksPolling();
         pendingRingtone = null;
+        currentRecapTaskId = null;
+        currentRecapModalEl = null;
+        clearSession();
         state.user = null;
         $('#app-view').classList.add('hidden');
         $('#auth-view').classList.remove('hidden');
@@ -532,6 +621,10 @@ function testSelectedRingtone() {
           { name: 'email', type: 'email', label: 'Email Baru', required: true },
         ], async (vals) => {
           await api('/api/auth/change-email', { method: 'PATCH', body: JSON.stringify(vals) });
+          if (state.user) {
+            state.user.email = vals.email;
+            saveSession(state.user);
+          }
           toast('Email diperbarui');
         });
         break;
@@ -568,7 +661,13 @@ function testSelectedRingtone() {
             selected_ringtone: vals.selected_ringtone || DEFAULT_RINGTONE,
           };
           const data = await api('/api/auth/preferences', { method: 'PATCH', body: JSON.stringify(payload) });
-          if (state.user) state.user.selected_ringtone = data.selected_ringtone || payload.selected_ringtone;
+          if (state.user) {
+            state.user.preferensi = payload.preferensi;
+            state.user.no_wa = payload.no_wa;
+            state.user.relasi = payload.relasi;
+            state.user.selected_ringtone = data.selected_ringtone || payload.selected_ringtone;
+            saveSession(state.user);
+          }
           toast('Preferensi diperbarui');
         });
         break;
@@ -580,6 +679,8 @@ function testSelectedRingtone() {
     const host = $('#modal-host');
     host.innerHTML = '';
     stopRingtone(); // hentikan audio tes dari modal sebelumnya
+    currentRecapTaskId = null;
+    currentRecapModalEl = null;
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -815,4 +916,17 @@ function testSelectedRingtone() {
       navigator.serviceWorker.register('sw.js').catch((err) => console.warn('SW reg failed:', err));
     });
   }
+
+  /* ===== Restore sesi saat halaman dimuat/direfresh =====
+   * Kalau ada data login tersimpan di localStorage, langsung masuk ke dashboard
+   * tanpa perlu login ulang. Kalau ternyata sesi sudah tidak valid (mis. akun
+   * dihapus admin), fetchTasks() di dalam enterApp() akan otomatis logout.
+   */
+  (function restoreSession() {
+    const saved = loadSession();
+    if (saved && saved.id_user && saved.role) {
+      state.user = saved;
+      enterApp();
+    }
+  })();
 })();
