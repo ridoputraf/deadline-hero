@@ -27,7 +27,7 @@
     document.documentElement.classList.toggle('dark', mode === 'dark');
     localStorage.setItem('dlh-theme', mode);
     const btn = $('#menu-dropdown [data-action="toggle-theme"]');
-    if (btn) btn.textContent = mode === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+    if (btn) btn.textContent = mode === 'dark' ? 'Light Mode' : 'Dark Mode';
   }
   applyTheme(localStorage.getItem('dlh-theme') || 'light');
 
@@ -52,7 +52,7 @@
       playRingtone(src);
       activeAlarmTaskId = id; // lacak tugas yang sedang membunyikan alarm (utk auto-stop, lihat scanDeadlineAlerts)
       markRung(id);
-      toast(`⏰ Pengingat: ${judul}`);
+      toast(`Pengingat: ${judul}`);
     }
   }
   window.addEventListener('pointerdown', markInteracted);
@@ -267,11 +267,20 @@ function testSelectedRingtone() {
     $('#user-role').textContent = u.role || 'user';
     $('#user-avatar').textContent = (u.nama || 'U').charAt(0).toUpperCase();
 
+    // Sapaan: nama depan saja
+    const firstName = (u.nama || 'Hero').split(' ')[0];
+    const heroGreeting = $('#hero-greeting');
+    if (heroGreeting) heroGreeting.textContent = `Halo, ${firstName}!`;
+
     const isAdmin = u.role === 'admin';
     $('#admin-panel').classList.toggle('hidden', !isAdmin);
     $('#nav-admin').classList.toggle('hidden', !isAdmin);
     $('#menu-change-email').classList.toggle('hidden', isAdmin);
     $('#menu-preferences').classList.toggle('hidden', isAdmin);
+
+    // Sembunyikan hero section untuk admin
+    const heroSection = $('.hero');
+    if (heroSection) heroSection.classList.toggle('hidden', isAdmin);
 
     fetchTasks();
     startDeadlineChecker();
@@ -408,7 +417,7 @@ function testSelectedRingtone() {
           const isExpired = !isNaN(deadlineMs) && deadlineMs < Date.now();
 
           if (done) {
-            actionBtn = `<button class="btn-done done" type="button" disabled>Selesai ✓</button>`;
+            actionBtn = `<button class="btn-done done" type="button" disabled>Selesai</button>`;
           } else if (isExpired) {
             actionBtn = `<button class="btn-done missed" type="button" disabled>Terlewat</button>`;
           } else {
@@ -423,7 +432,7 @@ function testSelectedRingtone() {
           <div class="task-meta">
             ${sumberTag}
             <span class="tag">${escapeHtml(t.kategori)}</span>
-            <span class="task-deadline">⏰ ${formatDate(t.deadline)}</span>
+            <span class="task-deadline">${formatDate(t.deadline)}</span>
           </div>
           ${deskripsi}
         </div>
@@ -449,7 +458,7 @@ function testSelectedRingtone() {
     modal.innerHTML = `
       <h3>Rekap: ${escapeHtml(judul)}</h3>
       <div class="recap-section">
-        <h4 class="recap-heading done-heading">✅ Sudah Mengerjakan (${sudah.length})</h4>
+        <h4 class="recap-heading done-heading">Sudah Mengerjakan (${sudah.length})</h4>
         <ul class="recap-list">
           ${sudah.length
             ? sudah.map((u) => `<li>${escapeHtml(u.nama)}</li>`).join('')
@@ -457,11 +466,11 @@ function testSelectedRingtone() {
         </ul>
       </div>
       <div class="recap-section">
-        <h4 class="recap-heading pending-heading">⏳ Belum Mengerjakan (${belum.length})</h4>
+        <h4 class="recap-heading pending-heading">Belum Mengerjakan (${belum.length})</h4>
         <ul class="recap-list">
           ${belum.length
             ? belum.map((u) => `<li>${escapeHtml(u.nama)}</li>`).join('')
-            : '<li class="recap-empty">Semua mahasiswa sudah mengerjakan 🎉</li>'}
+            : '<li class="recap-empty">Semua mahasiswa sudah mengerjakan.</li>'}
         </ul>
       </div>
       <div class="modal-actions">
@@ -743,7 +752,7 @@ function testSelectedRingtone() {
           return `<label>${f.label}
             <div class="select-preview-row">
               ${selectHtml}
-              <button type="button" class="btn-preview" data-preview="${f.name}">🔊 Tes</button>
+              <button type="button" class="btn-preview" data-preview="${f.name}">Tes</button>
             </div>
           </label>`;
         }
@@ -778,18 +787,18 @@ function testSelectedRingtone() {
         if (activeAudio && btn.dataset.playing === '1') {
           stopRingtone();
           btn.dataset.playing = '0';
-          btn.textContent = '🔊 Tes';
+          btn.textContent = 'Tes';
           btn.classList.remove('playing');
           return;
         }
         const audio = playRingtone(sel.value);
         if (!audio) return;
         btn.dataset.playing = '1';
-        btn.textContent = '⏹ Stop';
+        btn.textContent = 'Stop';
         btn.classList.add('playing');
         audio.addEventListener('ended', () => {
           btn.dataset.playing = '0';
-          btn.textContent = '🔊 Tes';
+          btn.textContent = 'Tes';
           btn.classList.remove('playing');
         });
       });
@@ -949,7 +958,7 @@ function testSelectedRingtone() {
           // begitu ada interaksi pertama dari user (klik/keydown).
           if (!pendingRingtone || pendingRingtone.id !== t.id) {
             pendingRingtone = { src, id: t.id, judul: t.judul };
-            toast('⏰ Alarm aktif — klik halaman untuk dengar nada dering');
+            toast('Alarm aktif — klik halaman untuk dengar nada dering');
           }
           return;
         }
@@ -957,7 +966,7 @@ function testSelectedRingtone() {
         playRingtone(src);
         activeAlarmTaskId = t.id;
         markRung(t.id);
-        toast(`⏰ Pengingat: ${t.judul}`);
+        toast(`Pengingat: ${t.judul}`);
         triggered = true;
         break;
       }
