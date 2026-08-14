@@ -3,19 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#E8674A" />
+  <meta name="theme-color" content="#6C3BFF" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171525" />
   <title>DeadLineHero</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div id="auth-view" class="view">
     <div class="auth-card">
-      <h1 class="brand">DeadLineHero</h1>
-      
+      <h1 class="brand">🦸 DeadLineHero</h1>
+      <p class="brand-sub">Masuk dan selamatkan deadline-mu!</p>
 
       <div class="tabs" role="tablist">
         <button class="tab-btn active" data-tab="login" type="button">Masuk</button>
@@ -29,7 +30,7 @@
         <label>Password
           <input type="password" name="password" required autocomplete="current-password" />
         </label>
-        <button type="submit" class="btn-primary">Masuk</button>
+        <button type="submit" class="btn-primary">🚀 Masuk Sekarang</button>
       </form>
 
       <form id="register-form" class="auth-form hidden" autocomplete="on">
@@ -86,7 +87,7 @@
             </select>
           </label>
         </div>
-        <button type="submit" class="btn-primary">Daftar</button>
+        <button type="submit" class="btn-primary">✨ Daftar Sekarang</button>
       </form>
 
       <p id="auth-msg" class="msg"></p>
@@ -96,6 +97,7 @@
   <div id="app-view" class="view hidden">
     <header class="header-bar">
       <div class="header-inner">
+        <div class="app-logo">🦸 DeadLineHero</div>
         <div class="profile-wrap">
           <button id="profile-trigger" class="profile-chip" type="button" aria-haspopup="true" aria-expanded="false">
             <div class="avatar" id="user-avatar">U</div>
@@ -105,18 +107,41 @@
             </div>
           </button>
           <div id="menu-dropdown" class="menu-dropdown hidden" role="menu">
-            <button type="button" data-action="change-password" role="menuitem">🔑 Ganti Password</button>
-            <button type="button" data-action="change-email" id="menu-change-email" role="menuitem">✉️ Ganti Email</button>
-            <button type="button" data-action="preferences" id="menu-preferences" role="menuitem">🔔 Preferensi Pengingat</button>
+            <button type="button" data-action="change-password" role="menuitem">Ganti Password</button>
+            <button type="button" data-action="change-email" id="menu-change-email" role="menuitem">Ganti Email</button>
+            <button type="button" data-action="preferences" id="menu-preferences" role="menuitem">Ganti Pengingat</button>
             <button type="button" data-action="toggle-theme" role="menuitem">🌙 Dark Mode</button>
             <div class="menu-sep"></div>
-            <button type="button" data-action="logout" class="danger" role="menuitem">🚪 Logout</button>
+            <button type="button" data-action="logout" class="danger" role="menuitem">Logout</button>
           </div>
         </div>
       </div>
     </header>
 
     <main class="dashboard">
+      <section class="hero" aria-label="Sapaan">
+        <h2 class="hero-title">Halo, Hero! 👋</h2>
+        <p class="hero-sub">Jangan panik. Kita selesaikan satu per satu. 💪</p>
+      </section>
+
+      <section class="summary-grid" aria-label="Ringkasan kategori">
+        <div class="summary-card">
+          <div class="summary-emoji">📝</div>
+          <div class="summary-label">Tugas</div>
+          <div class="summary-desc">Aktivitas harian yang menemanimu belajar.</div>
+        </div>
+        <div class="summary-card uts">
+          <div class="summary-emoji">📚</div>
+          <div class="summary-label">UTS</div>
+          <div class="summary-desc">Fokus dan persiapan di tengah jalan.</div>
+        </div>
+        <div class="summary-card uas">
+          <div class="summary-emoji">🎯</div>
+          <div class="summary-label">UAS</div>
+          <div class="summary-desc">Tantangan besar — kamu siap menaklukkannya.</div>
+        </div>
+      </section>
+
       <div class="card">
         <div class="tabs task-tabs" role="tablist">
           <button class="tab-btn active" data-task-tab="Tugas" type="button">Tugas</button>
@@ -124,11 +149,11 @@
           <button class="tab-btn" data-task-tab="UAS" type="button">UAS</button>
         </div>
         <ul id="task-list" class="task-list" aria-live="polite"></ul>
-        <p id="empty-msg" class="empty hidden">Belum ada tugas di kategori ini.</p>
+        <p id="empty-msg" class="empty hidden">Belum ada tugas di kategori ini. Santai dulu 😎</p>
       </div>
 
       <section id="admin-panel" class="admin-panel hidden">
-        <h2>Input Tugas Baru</h2>
+        <h2>✨ Input Tugas Baru</h2>
         <form id="task-form" class="task-form">
           <label>Judul
             <input type="text" name="judul" required />
@@ -153,7 +178,7 @@
           <label>Deadline
             <input type="datetime-local" step="1" name="deadline" required />
           </label>
-          <button type="submit" class="btn-primary">Tambah Tugas</button>
+          <button type="submit" class="btn-primary">✨ Tambah Tugas</button>
         </form>
         <p id="task-msg" class="msg"></p>
       </section>
@@ -162,8 +187,8 @@
     </main>
 
     <nav class="bottom-nav">
-      <button class="nav-item active" data-view="tasks" type="button">📋 Daftar</button>
-      <button class="nav-item" data-view="admin" id="nav-admin" type="button">➕ Input</button>
+      <button class="nav-item active" data-view="tasks" type="button">📝 Daftar</button>
+      <button class="nav-item" data-view="admin" id="nav-admin" type="button">✨ Input</button>
     </nav>
   </div>
 

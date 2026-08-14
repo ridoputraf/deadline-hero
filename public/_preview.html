@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PREVIEW Dashboard — hapus saya</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <!-- REPLIKA STATIS untuk preview styling saja — struktur meniru output renderTasksNow() -->
+  <div id="app-view" class="view">
+    <header class="header-bar">
+      <div class="header-inner">
+        <div class="app-logo">🦸 DeadLineHero</div>
+        <div class="profile-wrap">
+          <button id="profile-trigger" class="profile-chip" type="button">
+            <div class="avatar" id="user-avatar">R</div>
+            <div class="profile-info">
+              <span id="user-nama" class="profile-nama">Rido Putra</span>
+              <span id="user-role" class="profile-role">user</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <section class="hero" aria-label="Sapaan">
+        <h2 class="hero-title">Halo, Hero! 👋</h2>
+        <p class="hero-sub">Jangan panik. Kita selesaikan satu per satu. 💪</p>
+      </section>
+
+      <section class="summary-grid" aria-label="Ringkasan kategori">
+        <div class="summary-card">
+          <div class="summary-emoji">📝</div>
+          <div class="summary-label">Tugas</div>
+          <div class="summary-desc">Aktivitas harian yang menemanimu belajar.</div>
+        </div>
+        <div class="summary-card uts">
+          <div class="summary-emoji">📚</div>
+          <div class="summary-label">UTS</div>
+          <div class="summary-desc">Fokus dan persiapan di tengah jalan.</div>
+        </div>
+        <div class="summary-card uas">
+          <div class="summary-emoji">🎯</div>
+          <div class="summary-label">UAS</div>
+          <div class="summary-desc">Tantangan besar — kamu siap menaklukkannya.</div>
+        </div>
+      </section>
+
+      <div class="card">
+        <div class="tabs task-tabs" role="tablist">
+          <button class="tab-btn active" data-task-tab="Tugas" type="button">Tugas</button>
+          <button class="tab-btn" data-task-tab="UTS" type="button">UTS</button>
+          <button class="tab-btn" data-task-tab="UAS" type="button">UAS</button>
+        </div>
+        <ul id="task-list" class="task-list" aria-live="polite">
+          <li class="task-item">
+            <div class="task-body">
+              <div class="task-title">Bab 4: Rangkuman Aljabar Linear</div>
+              <div class="task-meta">
+                <span class="tag vclass">Vclass</span>
+                <span class="tag">Tugas</span>
+                <span class="task-deadline">⏰ 20 Agu 2026, 23.59</span>
+              </div>
+              <div class="task-desc">Kerjakan rangkuman soal halaman 40-55 dan unggah ke Vclass.</div>
+            </div>
+            <button class="btn-done" type="button">Mark As Done</button>
+          </li>
+          <li class="task-item">
+            <div class="task-body">
+              <div class="task-title">Praktikum: Laporan Modul 7</div>
+              <div class="task-meta">
+                <span class="tag praktikum">Praktikum</span>
+                <span class="tag">Tugas</span>
+                <span class="task-deadline">⏰ 18 Agu 2026, 09.00</span>
+              </div>
+            </div>
+            <button class="btn-done" type="button">Mark As Done</button>
+          </li>
+          <li class="task-item done">
+            <div class="task-body">
+              <div class="task-title">Ilab: Latihan Quiz 3</div>
+              <div class="task-meta">
+                <span class="tag ilab">Ilab</span>
+                <span class="tag">Tugas</span>
+                <span class="task-deadline">⏰ 12 Agu 2026, 23.59</span>
+              </div>
+            </div>
+            <button class="btn-done done" type="button" disabled>Selesai ✓</button>
+          </li>
+          <li class="task-item done">
+            <div class="task-body">
+              <div class="task-title">Esai Kewirausahaan</div>
+              <div class="task-meta">
+                <span class="tag vclass">Vclass</span>
+                <span class="tag">Tugas</span>
+                <span class="task-deadline">⏰ 10 Agu 2026, 23.59</span>
+              </div>
+            </div>
+            <button class="btn-done missed" type="button" disabled>Terlewat</button>
+          </li>
+        </ul>
+      </div>
+
+      <section id="admin-panel" class="admin-panel">
+        <h2>✨ Input Tugas Baru</h2>
+        <form id="task-form" class="task-form">
+          <label>Judul <input type="text" name="judul" /></label>
+          <label>Kategori
+            <select name="kategori"><option>Tugas</option></select>
+          </label>
+          <label>Deadline <input type="datetime-local" name="deadline" /></label>
+          <button type="button" class="btn-primary">✨ Tambah Tugas</button>
+        </form>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-item active" type="button">📝 Daftar</button>
+      <button class="nav-item" type="button">✨ Input</button>
+    </nav>
+  </div>
+</body>
+</html>
