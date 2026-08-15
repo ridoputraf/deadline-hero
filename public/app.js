@@ -52,7 +52,7 @@
       playRingtone(src);
       activeAlarmTaskId = id; // lacak tugas yang sedang membunyikan alarm (utk auto-stop, lihat scanDeadlineAlerts)
       markRung(id);
-      toast(`Pengingat: ${judul}`);
+      toast(`Psst, "${judul}" mepet deadline-nya. Gas kerjain!`);
     }
   }
   window.addEventListener('pointerdown', markInteracted);
@@ -80,7 +80,7 @@
   function playRingtone(src) {
     stopRingtone();
     if (!src) {
-      toast('Pilih nada dering terlebih dahulu!');
+      toast('Pilih dulu nada deringnya ya.');
       return null;
     }
 
@@ -103,7 +103,7 @@
     // cukup log & beri tahu lewat toast, tanpa menghentikan alur aplikasi.
     audio.play().catch((err) => {
       console.warn('Audio diblokir/gagal diputar:', err.message);
-      toast('Nada dering diblokir browser, klik layar untuk mengaktifkan suara.');
+      toast('Browsernya nunggu kamu klik halaman dulu biar suaranya bisa keluar.');
     });
 
     audio.addEventListener('ended', () => {
@@ -112,16 +112,6 @@
 
     return audio;
   }
-
-// Fungsi helper yang dipanggil saat tombol "Tes Suara" diklik
-function testSelectedRingtone() {
-  // Ambil nilai ringtone dari radio button atau dropdown yang sedang dipilih user
-  const selectedElement = document.querySelector('input[name="selected_ringtone"]:checked') 
-                       || document.getElementById('selected_ringtone');
-  
-  const ringtonePath = selectedElement ? selectedElement.value : '/Sounds/ringtone1.mp3';
-  playRingtone(ringtonePath);
-}
 
   /* ===== API ===== */
   async function api(path, opts = {}) {
@@ -177,28 +167,45 @@ function testSelectedRingtone() {
     toastTimer = setTimeout(() => el.classList.add('hidden'), 2600);
   }
 
-  /* ===== Auth Tabs ===== */
+  /* ===== Auth Tabs → flip kartu 3D =====
+   * Kedua face kartu memakai position:absolute, jadi tinggi .flip-card__inner
+   * harus diset manual dari tinggi face yang sedang aktif. Dengan begitu form
+   * register (yang lebih panjang) tetap muat tanpa merusak animasi flip-nya.
+   */
+  function sizeFlipCard() {
+    const inner = $('.flip-card__inner');
+    if (!inner) return;
+    const face = inner.classList.contains('flipped')
+      ? $('.flip-card__back', inner)
+      : $('.flip-card__front', inner);
+    if (face) inner.style.height = `${face.offsetHeight}px`;
+  }
+
   $$('.tab-btn[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const tab = btn.dataset.tab;
       $$('.tab-btn[data-tab]').forEach((b) => b.classList.toggle('active', b === btn));
-      $('#login-form').classList.toggle('hidden', tab !== 'login');
-      $('#register-form').classList.toggle('hidden', tab !== 'register');
+      const inner = $('.flip-card__inner');
+      if (inner) inner.classList.toggle('flipped', tab === 'register');
+      sizeFlipCard();
       $('#auth-msg').textContent = '';
     });
   });
+  window.addEventListener('resize', sizeFlipCard);
+  window.addEventListener('load', sizeFlipCard); // tinggi bisa berubah setelah font web termuat
+  sizeFlipCard();
 
-  /* ===== Preferensi radio: show/hide WA fields + ringtone dropdown ===== */
+  /* ===== Preferensi: show/hide WA fields + ringtone dropdown ===== */
   function syncPreferensiVisibility() {
-    const checked = $('input[name="preferensi"]:checked');
-    if (!checked) return;
-    $('#wa-extra').classList.toggle('hidden', checked.value !== 'nomor_wa');
-    $('#ringtone-extra').classList.toggle('hidden', checked.value !== 'nada_dering');
+    const sel = $('#pref-select');
+    if (!sel) return;
+    $('#wa-extra').classList.toggle('hidden', sel.value !== 'nomor_wa');
+    $('#ringtone-extra').classList.toggle('hidden', sel.value !== 'nada_dering');
+    sizeFlipCard();
   }
-  $$('input[name="preferensi"]').forEach((r) => {
-    r.addEventListener('change', syncPreferensiVisibility);
-  });
-  // Sync awal: radio default 'nada_dering' (checked) → tampilkan ringtone-extra
+  const prefSelect = $('#pref-select');
+  if (prefSelect) prefSelect.addEventListener('change', syncPreferensiVisibility);
+  // Sync awal: default 'nada_dering' → tampilkan ringtone-extra
   syncPreferensiVisibility();
 
   /* ===== Login ===== */
@@ -217,7 +224,7 @@ function testSelectedRingtone() {
       enterApp();
     } catch (err) {
       msg.className = 'msg error';
-      msg.textContent = err.message;
+      msg.textContent = humanizeError(err);
     }
   });
 
@@ -226,14 +233,35 @@ function testSelectedRingtone() {
     e.preventDefault();
     const f = e.target;
     const msg = $('#auth-msg');
-    const preferensi = $('input[name="preferensi"]:checked').value;
-    const relasi = preferensi === 'nomor_wa' ? ($('input[name="relasi"]:checked') || {}).value : null;
+    const preferensi = f.preferensi.value;
+    const npm = f.npm.value.trim();
+
+    // Validasi frontend: NPM wajib 8-10 digit angka (sama seperti aturan backend)
+    if (!/^[0-9]{8,10}$/.test(npm)) {
+      msg.className = 'msg error';
+      msg.textContent = 'Waduh, NPM kamu harus 8-10 digit angka nih!';
+      f.npm.focus();
+      return;
+    }
+
+    // Nomor WA wajib valid kalau preferensinya nomor_wa
+    if (preferensi === 'nomor_wa') {
+      const wa = f.no_wa.value.trim().replace(/[\s-]/g, '');
+      if (!/^[0-9+]{9,16}$/.test(wa)) {
+        msg.className = 'msg error';
+        msg.textContent = 'Nomor WhatsApp-nya kelihatannya belum lengkap. Tulis 9-15 digit angka ya!';
+        f.no_wa.focus();
+        return;
+      }
+    }
+
+    const relasi = preferensi === 'nomor_wa' ? f.relasi.value : null;
     const selectedRingtone = preferensi === 'nada_dering' ? f.selected_ringtone.value : null;
     try {
       await api('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify({
-          npm: f.npm.value.trim(),
+          npm,
           nama: f.nama.value.trim(),
           email: f.email.value.trim(),
           password: f.password.value,
@@ -243,14 +271,15 @@ function testSelectedRingtone() {
           selected_ringtone: selectedRingtone,
         }),
       });
+      const firstName = (f.nama.value.trim() || 'Hero').split(' ')[0];
       msg.className = 'msg success';
-      msg.textContent = 'Registrasi berhasil. Silakan login.';
+      msg.textContent = `Yes! Akun kamu udah jadi, ${firstName}. Tinggal masuk, ya!`;
       f.reset();
       syncPreferensiVisibility();
       $('.tab-btn[data-tab="login"]').click();
     } catch (err) {
       msg.className = 'msg error';
-      msg.textContent = err.message;
+      msg.textContent = humanizeError(err);
     }
   });
 
@@ -303,11 +332,11 @@ function testSelectedRingtone() {
     } catch (err) {
       if (err.status === 401 || err.status === 403) {
         // Kredensial di localStorage sudah tidak valid (mis. akun dihapus) → paksa logout
-        toast('Sesi berakhir, silakan login kembali.');
+        toast('Sesi kamu udah habis. Yok masuk lagi biar aman.');
         handleMenuAction('logout');
         return;
       }
-      if (!silent) toast(err.message);
+      if (!silent) toast(humanizeError(err));
     }
   }
 
@@ -565,12 +594,12 @@ function testSelectedRingtone() {
 
     try {
       const data = await api(`/api/tasks/${id}/done`, { method: 'PATCH' });
-      toast(data.message || 'Tugas ditandai selesai');
+      toast(data.message || 'Mantap, tugas ini udah kamu bereskan!');
       fetchTasks();
     } catch (err) {
       // Rollback optimistic
       applyOptimistic('belum');
-      toast(err.message);
+      toast(humanizeError(err));
     }
   }
 
@@ -607,13 +636,13 @@ function testSelectedRingtone() {
           }),
         });
         msg.className = 'msg success';
-        msg.textContent = 'Tugas ditambahkan.';
+        msg.textContent = 'Tugas baru udah masuk. Semangat buat yang ngerjain!';
         taskForm.reset();
         toggleSumber();
         fetchTasks();
       } catch (err) {
         msg.className = 'msg error';
-        msg.textContent = err.message;
+        msg.textContent = humanizeError(err);
       }
     });
   }
@@ -666,7 +695,7 @@ function testSelectedRingtone() {
           { name: 'password', type: 'password', label: 'Password Baru', required: true },
         ], async (vals) => {
           await api('/api/auth/change-password', { method: 'PATCH', body: JSON.stringify(vals) });
-          toast('Password diperbarui');
+          toast('Password baru udah aman terpasang.');
         });
         break;
       case 'change-email':
@@ -678,7 +707,7 @@ function testSelectedRingtone() {
             state.user.email = vals.email;
             saveSession(state.user);
           }
-          toast('Email diperbarui');
+          toast('Email kamu udah berhasil diganti.');
         });
         break;
       case 'preferences':
@@ -721,7 +750,7 @@ function testSelectedRingtone() {
             state.user.selected_ringtone = data.selected_ringtone || payload.selected_ringtone;
             saveSession(state.user);
           }
-          toast('Preferensi diperbarui');
+          toast('Siap! Pengingat kamu udah diperbarui.');
         });
         break;
     }
@@ -881,20 +910,22 @@ function testSelectedRingtone() {
   }
 
   /* ===== Deadline Sound Checker (client-side trigger) =====
-   * Tiap 30 detik scan semua task user (preferensi nada_dering).
-   * Trigger jika deadline dalam window [-1jam, +5menit] ATAU overdue & belum selesai hari ini.
-   * Anti-spam: simpan id_tugas yang sudah dibunyikan di sessionStorage.
-   * Audio hanya play setelah user interact (browser autoplay policy).
+   * Dipanggil setiap GET /api/tasks selesai + tiap 30 detik.
+   * Trigger untuk tugas berstatus "belum" yang deadlinenya < 1 jam dari sekarang
+   * (dan belum lewat). Anti-bunyi-ulang: simpan penanda per tugas di
+   * localStorage (ringtone_played_task_<id_tugas>) sehingga satu tugas hanya
+   * berbunyi SATU KALI. Audio hanya play setelah user interact (autoplay policy).
    */
   let checkerTimer = null;
-  function getRungSet() {
-    try { return new Set(JSON.parse(sessionStorage.getItem('dlh-rung') || '[]')); }
-    catch (_) { return new Set(); }
+  const RUNG_PREFIX = 'ringtone_played_task_';
+
+  function hasRung(id) {
+    try { return localStorage.getItem(RUNG_PREFIX + id) === '1'; }
+    catch (_) { return false; }
   }
   function markRung(id) {
-    const set = getRungSet();
-    set.add(id);
-    sessionStorage.setItem('dlh-rung', JSON.stringify([...set]));
+    try { localStorage.setItem(RUNG_PREFIX + id, '1'); }
+    catch (_) { /* storage penuh/diblokir — biarkan alarm tetap bunyi sekali per sesi */ }
   }
   // Cek apakah tugas `id` yang sedang berbunyi masih valid untuk terus berbunyi:
   // harus masih ada, belum "selesai", dan deadline-nya belum lewat (dl > now).
@@ -912,6 +943,48 @@ function testSelectedRingtone() {
     return false; // tugas tidak ditemukan lagi (mis. dihapus admin)
   }
 
+  /* ===== checkUrgentTasksAndPlayRingtone =====
+   * Inti alarm: cari tugas berstatus "belum" dengan deadline < 1 jam dari
+   * sekarang (tapi belum lewat), lalu putar ringtone milik user.
+   * Dipanggil dari scanDeadlineAlerts() setiap kali data GET /api/tasks turun
+   * dan dari interval 30 detik. Aman dari Autoplay Policy: kalau user belum
+   * pernah interaksi, simpan pendingRingtone lalu mainkan saat interaksi
+   * pertama terdeteksi (mis. klik tombol Login). Satu tugas = satu kali bunyi
+   * (penanda di localStorage, lihat hasRung/markRung).
+   */
+  function checkUrgentTasksAndPlayRingtone(tasks, userRingtone) {
+    const now = Date.now();
+    const windowStart = now - 60 * 60 * 1000; // batas bawah: deadline < 1 jam dari sekarang
+
+    for (const k of Object.keys(tasks)) {
+      for (const raw of tasks[k]) {
+        const t = normTask(raw);
+        if (t.status === 'selesai') continue; // hanya yang masih "belum"
+        const dl = new Date(t.deadline).getTime();
+        if (isNaN(dl)) continue;
+        if (!(dl >= windowStart && dl > now)) continue; // belum mepet / sudah lewat
+        if (hasRung(t.id)) continue; // sudah pernah dibunyikan
+
+        const src = userRingtone || DEFAULT_RINGTONE;
+        if (!userInteracted) {
+          // Belum ada interaksi user → tahan dulu, mainkan begitu user klik/keydown
+          if (!pendingRingtone || pendingRingtone.id !== t.id) {
+            pendingRingtone = { src, id: t.id, judul: t.judul };
+            toast('Ada pengingat nunggu — klik di mana aja biar bunyi');
+          }
+          return null;
+        }
+
+        playRingtone(src);
+        activeAlarmTaskId = t.id;
+        markRung(t.id);
+        toast(`Psst, "${t.judul}" kurang dari 1 jam lagi. Gas kerjain!`);
+        return t;
+      }
+    }
+    return null;
+  }
+
   function scanDeadlineAlerts() {
     const u = state.user;
 
@@ -927,7 +1000,6 @@ function testSelectedRingtone() {
     }
 
     const now = Date.now();
-    const windowStart = now - 60 * 60 * 1000; // -1 jam
 
     // (3) Jika tugas yang SEDANG berbunyi kini sudah "Terlewat" atau ditandai selesai,
     // hentikan audio secara otomatis alih-alih terus berbunyi.
@@ -936,42 +1008,7 @@ function testSelectedRingtone() {
       activeAlarmTaskId = null;
     }
 
-    const rung = getRungSet();
-    let triggered = false;
-
-    for (const k of Object.keys(state.tasks)) {
-      for (const raw of state.tasks[k]) {
-        const t = normTask(raw);
-        if (t.status === 'selesai') continue;
-        const dl = new Date(t.deadline).getTime();
-        if (isNaN(dl)) continue;
-
-        // (1)+(3) Trigger HANYA jika: deadline < 1 jam lagi (>= windowStart) DAN
-        // waktu belum lewat (dl > now, bukan <=) DAN tugas belum selesai (sudah difilter di atas).
-        const inWindow = dl >= windowStart && dl > now;
-        if (!inWindow) continue;
-        if (rung.has(t.id)) continue;
-
-        const src = u.selected_ringtone || DEFAULT_RINGTONE;
-        if (!userInteracted) {
-          // Simpan pemicu yang tertunda di state global, siap diputar
-          // begitu ada interaksi pertama dari user (klik/keydown).
-          if (!pendingRingtone || pendingRingtone.id !== t.id) {
-            pendingRingtone = { src, id: t.id, judul: t.judul };
-            toast('Alarm aktif — klik halaman untuk dengar nada dering');
-          }
-          return;
-        }
-
-        playRingtone(src);
-        activeAlarmTaskId = t.id;
-        markRung(t.id);
-        toast(`Pengingat: ${t.judul}`);
-        triggered = true;
-        break;
-      }
-      if (triggered) break;
-    }
+    checkUrgentTasksAndPlayRingtone(state.tasks, u.selected_ringtone);
   }
   function startDeadlineChecker() {
     if (checkerTimer) clearInterval(checkerTimer);
@@ -986,6 +1023,29 @@ function testSelectedRingtone() {
   }
 
   /* ===== Utils ===== */
+  /* Terjemahkan pesan error server (yang kaku) jadi bahasa mahasiswa
+   * yang suportif dan ramah. Pesan tak dikenal diteruskan apa adanya
+   * supaya tetap informatif. */
+  function humanizeError(err) {
+    const raw = String((err && err.message) || '');
+    if (/failed to fetch|networkerror|load failed/i.test(raw)) {
+      return 'Koneksi lagi ngambek. Cek internet kamu, lalu coba lagi ya.';
+    }
+    const map = {
+      'Email atau password salah': 'Waduh, email atau password kamu keliru. Coba cek lagi ya.',
+      'Email sudah terdaftar': 'Email ini sudah pernah dipakai. Langsung masuk saja, atau pakai email lain ya.',
+      'NPM harus berupa angka 8 hingga 10 digit!': 'Waduh, NPM kamu harus 8-10 digit angka nih!',
+      'Format email tidak valid!': 'Hmm, format email kamu kelihatannya belum benar. Coba dicek ya.',
+      'no_wa wajib diisi jika preferensi nomor_wa': 'Nomor WhatsApp-nya masih kosong nih. Isi dulu ya.',
+      'npm, nama, email, password, preferensi wajib diisi': 'Masih ada kolom yang kosong. Lengkapi dulu ya.',
+      'preferensi harus nomor_wa atau nada_dering': 'Pilih dulu mau diingatkan lewat apa ya.',
+      'relasi harus pacar, keluarga, atau sahabat': 'Pilih dulu hubungannya: pacar, keluarga, atau sahabat.',
+      'Terjadi kesalahan server': 'Server kita lagi tepar sebentar. Coba lagi nanti ya.',
+      'Request gagal': 'Ada yang gagal di jalan. Coba sekali lagi ya.',
+    };
+    return map[raw] || raw;
+  }
+
   function escapeHtml(str) {
     return String(str ?? '').replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',

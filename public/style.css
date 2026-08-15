@@ -113,6 +113,9 @@
   --shadow-card: 0 8px 30px rgba(35, 25, 80, 0.07);
   --shadow-card-hover: 0 15px 40px rgba(35, 25, 80, 0.12);
   --shadow-primary: 0 10px 25px rgba(108, 59, 255, 0.28);
+
+  /* Neubrutalism — border & offset shadow solid (§4 Auth flip card) */
+  --nb-border: #211E33;
   --shadow-pop: 0 18px 50px rgba(35, 25, 80, 0.22);
   --focus-ring: 0 0 0 3px rgba(108, 59, 255, 0.22);
 
@@ -136,6 +139,7 @@
   --shadow-card-hover: 0 15px 40px rgba(0, 0, 0, 0.45);
   --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.55);
   --focus-ring: 0 0 0 3px rgba(155, 123, 255, 0.30);
+  --nb-border: #F8F7FF;
   --hero-bg:
     radial-gradient(circle at top left, rgba(155, 123, 255, 0.10), transparent 30%),
     radial-gradient(circle at top right, rgba(255, 227, 110, 0.06), transparent 25%);
@@ -191,42 +195,172 @@ a { color: var(--primary-hover); }
 }
 .dark :focus-visible { outline-color: var(--dark-primary); }
 
-/* ===== 4. Auth (§12 — cheerful, bukan form kosong) ===== */
+/* ===== 4. Auth — 3D Flip Card Neubrutalism (§12) ===== */
 #auth-view {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-12) var(--space-4);
+  padding: var(--space-8) var(--space-4) var(--space-12);
   background: var(--hero-bg), var(--page-bg);
 }
 
-.auth-card {
-  background: var(--card-bg);
-  color: var(--text-strong);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card-hover);
-  padding: var(--space-8) var(--space-6);
+.auth-stage {
   width: 100%;
-  max-width: 440px;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
 }
 
 .brand {
   text-align: center;
   font-size: var(--text-2xl);
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text-strong);
-  margin-bottom: var(--space-1);
 }
 
-.brand-sub {
-  text-align: center;
+/* Tab Masuk/Daftar — pemicu flip kartu, gaya neubrutalism */
+.auth-tabs {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.auth-tabs .tab-btn {
+  padding: 10px 28px;
+  border: 2.5px solid var(--nb-border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--text-strong);
+  font-weight: 700;
   font-size: var(--text-sm);
-  color: var(--text-muted);
-  margin-bottom: var(--space-6);
+  box-shadow: 4px 4px 0 var(--nb-border);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease, color 0.2s ease;
 }
 
+.auth-tabs .tab-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--nb-border);
+}
+
+.auth-tabs .tab-btn.active {
+  background: var(--primary);
+  color: var(--primary-on-color);
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--nb-border);
+}
+
+.dark .auth-tabs .tab-btn { background: var(--dark-surface); color: var(--dark-text); }
+.dark .auth-tabs .tab-btn.active { background: var(--dark-primary); color: #211E33; }
+
+/* Flip card: tinggi .flip-card__inner diatur dari JS (sizeFlipCard)
+ * sesuai tinggi face yang aktif, jadi form panjang (register) tetap muat
+ * tanpa merusak animasi 3D-nya. */
+.flip-card {
+  perspective: 1400px;
+  width: 100%;
+}
+
+.flip-card__inner {
+  position: relative;
+  width: 100%;
+  height: 460px; /* fallback sebelum JS (sizeFlipCard) set tinggi pas */
+  transition: transform 0.75s cubic-bezier(0.4, 0.2, 0.2, 1), height 0.45s ease;
+  transform-style: preserve-3d;
+}
+
+.flip-card__inner.flipped { transform: rotateY(180deg); }
+
+.flip-card__front,
+.flip-card__back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background: var(--card-bg);
+  border: 2.5px solid var(--nb-border);
+  border-radius: var(--radius-md);
+  box-shadow: 7px 7px 0 var(--nb-border);
+  padding: var(--space-6);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.flip-card__back { transform: rotateY(180deg); }
+
+.flip-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: var(--space-2);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+/* Input neubrutalism — khusus form auth (task-form tetap gaya lama) */
+.auth-form input,
+.auth-form select {
+  padding: 12px 14px;
+  border: 2px solid var(--nb-border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text-strong);
+  font-weight: 500;
+  box-shadow: 3px 3px 0 var(--nb-border);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-form input:focus,
+.auth-form select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 3px 3px 0 var(--primary);
+}
+
+.dark .auth-form input:focus,
+.dark .auth-form select:focus {
+  border-color: var(--dark-primary);
+  box-shadow: 3px 3px 0 var(--dark-primary);
+}
+
+.auth-form input::placeholder { color: var(--text-muted); opacity: 0.85; }
+
+/* Tombol utama di kartu auth: tebal + offset shadow khas neubrutalism */
+.auth-form .btn-primary {
+  border: 2px solid var(--nb-border);
+  box-shadow: 5px 5px 0 var(--nb-border);
+  font-weight: 700;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-form .btn-primary:active {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 var(--nb-border);
+}
+
+/* Field kondisional (WA / nada dering) di dalam face belakang */
+#wa-extra,
+#ringtone-extra {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Tabs dasar — dipakai tab kategori tugas (Tugas/UTS/UAS) */
 .tabs {
   display: flex;
   background: var(--soft-bg);
@@ -258,14 +392,13 @@ a { color: var(--primary-hover); }
   color: #C9BBFF; /* AA di atas --dark-surface-light */
 }
 
-.auth-form,
+/* Form admin (input tugas) — gaya lama, tidak ikut neubrutalism */
 .task-form {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
 }
 
-.auth-form label,
 .task-form label {
   display: flex;
   flex-direction: column;
@@ -275,7 +408,6 @@ a { color: var(--primary-hover); }
   color: var(--text-strong);
 }
 
-.auth-form input,
 .task-form input,
 .task-form textarea,
 .task-form select {
@@ -288,7 +420,6 @@ a { color: var(--primary-hover); }
   transition: border 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
-.auth-form input:focus,
 .task-form input:focus,
 .task-form textarea:focus,
 .task-form select:focus {
@@ -297,52 +428,29 @@ a { color: var(--primary-hover); }
   box-shadow: var(--focus-ring);
 }
 
-.dark .auth-form input,
 .dark .task-form input,
 .dark .task-form textarea,
-.dark .task-form select {
-  border-color: var(--line);
-}
+.dark .task-form select { border-color: var(--line); }
 
-.dark .auth-form input:focus,
 .dark .task-form input:focus,
 .dark .task-form textarea:focus,
-.dark .task-form select:focus {
-  border-color: var(--dark-primary);
-}
+.dark .task-form select:focus { border-color: var(--dark-primary); }
 
 ::placeholder { color: var(--text-muted); opacity: 0.8; }
 
-.pref-fieldset {
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: var(--space-4);
-  background: var(--soft-bg);
+@media (max-width: 640px) {
+  .flip-card__front,
+  .flip-card__back { padding: var(--space-4); }
+
+  .auth-tabs .tab-btn {
+    flex: 1;
+    padding: 10px 16px;
+  }
 }
 
-.pref-fieldset legend {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  padding: 0 var(--space-2);
-  color: var(--text-strong);
+@media (prefers-reduced-motion: reduce) {
+  .flip-card__inner { transition: height 0.45s ease; } /* flip diredam, resize tetap halus */
 }
-
-.radio {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-2);
-  font-weight: 500;
-  padding: var(--space-1) 0;
-}
-
-.radio input {
-  accent-color: var(--primary);
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-}
-
-.dark .radio input { accent-color: var(--dark-primary); }
 
 /* ===== 5. Tombol (§7 — kombinasi sudah tervalidasi kontras) ===== */
 .btn-primary {

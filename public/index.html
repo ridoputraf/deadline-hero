@@ -14,82 +14,79 @@
 </head>
 <body>
   <div id="auth-view" class="view">
-    <div class="auth-card">
+    <div class="auth-stage">
       <h1 class="brand">DeadLineHero</h1>
 
-      <div class="tabs" role="tablist">
+      <div class="auth-tabs" role="tablist" aria-label="Masuk atau daftar">
         <button class="tab-btn active" data-tab="login" type="button">Masuk</button>
         <button class="tab-btn" data-tab="register" type="button">Daftar</button>
       </div>
 
-      <form id="login-form" class="auth-form" autocomplete="on">
-        <label>Email
-          <input type="email" name="email" required autocomplete="email" />
-        </label>
-        <label>Password
-          <input type="password" name="password" required autocomplete="current-password" />
-        </label>
-        <button type="submit" class="btn-primary">Masuk Sekarang</button>
-      </form>
+      <div class="flip-card">
+        <div class="flip-card__inner">
+          <div class="flip-card__front">
+            <form id="login-form" class="auth-form" autocomplete="on">
+              <h2 class="flip-title">Selamat datang kembali!</h2>
+              <label>Email
+                <input type="email" name="email" required placeholder="Tulis email kamu di sini" autocomplete="email" />
+              </label>
+              <label>Password
+                <input type="password" name="password" required placeholder="Rahasia kamu, jangan dibagikan" autocomplete="current-password" />
+              </label>
+              <button type="submit" class="btn-primary">Masuk Sekarang</button>
+            </form>
+          </div>
 
-      <form id="register-form" class="auth-form hidden" autocomplete="on">
-        <label>Nama
-          <input type="text" name="nama" required autocomplete="name" />
-        </label>
-        <label>NPM
-          <input type="text" name="npm" required autocomplete="off" />
-        </label>
-        <label>Email
-          <input type="email" name="email" required autocomplete="email" />
-        </label>
-        <label>Password
-          <input type="password" name="password" required autocomplete="new-password" />
-        </label>
-        <fieldset class="pref-fieldset">
-          <legend>Preferensi Pengingat</legend>
-          <label class="radio">
-            <input type="radio" name="preferensi" value="nada_dering" checked />
-            <span>Nada Dering</span>
-          </label>
-          <label class="radio">
-            <input type="radio" name="preferensi" value="nomor_wa" />
-            <span>Nomor WhatsApp Orang Terdekat</span>
-          </label>
-        </fieldset>
-        <div id="wa-extra" class="hidden">
-          <label id="no-wa-field">
-            Nomor WhatsApp
-            <input type="tel" name="no_wa" placeholder="62xxx / 08xxx" autocomplete="tel" />
-          </label>
-          <fieldset class="pref-fieldset">
-            <legend>Hubungan dengan Kontak</legend>
-            <label class="radio">
-              <input type="radio" name="relasi" value="pacar" checked />
-              <span>Pacar</span>
-            </label>
-            <label class="radio">
-              <input type="radio" name="relasi" value="keluarga" />
-              <span>Keluarga</span>
-            </label>
-            <label class="radio">
-              <input type="radio" name="relasi" value="sahabat" />
-              <span>Sahabat</span>
-            </label>
-          </fieldset>
+          <div class="flip-card__back">
+            <form id="register-form" class="auth-form" autocomplete="on">
+              <h2 class="flip-title">Yuk, bikin akun barumu!</h2>
+              <label>NPM
+                <input type="text" name="npm" required inputmode="numeric" maxlength="10"
+                  pattern="[0-9]{8,10}" placeholder="8-10 digit angka NPM kamu" autocomplete="off" />
+              </label>
+              <label>Nama Lengkap
+                <input type="text" name="nama" required placeholder="Namanya dipanggil apa nih" autocomplete="name" />
+              </label>
+              <label>Email
+                <input type="email" name="email" required placeholder="nama@emailkamu.com" autocomplete="email" />
+              </label>
+              <label>Password
+                <input type="password" name="password" required placeholder="Buat yang gampang kamu inget" autocomplete="new-password" />
+              </label>
+              <label>Mau diingatkan lewat apa?
+                <select id="pref-select" name="preferensi">
+                  <option value="nada_dering" selected>Nada dering di HP ini</option>
+                  <option value="nomor_wa">Chat WhatsApp ke orang terdekat</option>
+                </select>
+              </label>
+              <div id="wa-extra" class="hidden">
+                <label>Nomor WhatsApp-nya
+                  <input type="tel" name="no_wa" placeholder="Contoh: 081234567890" autocomplete="tel" />
+                </label>
+                <label>Dia siapa buat kamu?
+                  <select name="relasi">
+                    <option value="pacar" selected>Pacar</option>
+                    <option value="keluarga">Keluarga</option>
+                    <option value="sahabat">Sahabat</option>
+                  </select>
+                </label>
+              </div>
+              <div id="ringtone-extra" class="hidden">
+                <label>Pilih nada dering favoritmu
+                  <select name="selected_ringtone">
+                    <option value="/Sounds/ringtone1.mp3">Bruno Mars - Risk It All</option>
+                    <option value="/Sounds/ringtone2.mp3">Cameron Boyce - OBH Combi Sachet</option>
+                    <option value="/Sounds/ringtone3.mp3">Sal Priadi - Foto Kita Blur</option>
+                  </select>
+                </label>
+              </div>
+              <button type="submit" class="btn-primary">Gas, Daftar!</button>
+            </form>
+          </div>
         </div>
-        <div id="ringtone-extra" class="hidden">
-          <label>Pilih Nada Dering
-            <select name="selected_ringtone">
-              <option value="/Sounds/ringtone1.mp3">Bruno Mars - Risk It All</option>
-              <option value="/Sounds/ringtone2.mp3">Cameron Boyce - OBH Combi Sachet</option>
-              <option value="/Sounds/ringtone3.mp3">Sal Priadi - Foto Kita Blur</option>
-            </select>
-          </label>
-        </div>
-        <button type="submit" class="btn-primary">Daftar Sekarang</button>
-      </form>
+      </div>
 
-      <p id="auth-msg" class="msg"></p>
+      <p id="auth-msg" class="msg" aria-live="polite"></p>
     </div>
   </div>
 
@@ -129,7 +126,7 @@
           <button class="tab-btn" data-task-tab="UAS" type="button">UAS</button>
         </div>
         <ul id="task-list" class="task-list" aria-live="polite"></ul>
-        <p id="empty-msg" class="empty hidden">Belum ada tugas di kategori ini.</p>
+        <p id="empty-msg" class="empty hidden">Masih kosong nih. Santai dulu, atau tunggu tugas baru masuk.</p>
       </div>
 
       <section id="admin-panel" class="admin-panel hidden">
