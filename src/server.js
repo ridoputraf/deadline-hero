@@ -66,10 +66,10 @@ app.post('/api/auth/register', async (req, res) => {
   }
 
   // --- VALIDASI TAMBAHAN SERVER-SIDE ---
-  // 1. Validasi Format NPM: Wajib 8 - 10 digit angka saja (mencegah teks aneh / SQL Injection payload)
-  const npmRegex = /^[0-9]{8,10}$/;
+  // 1. Validasi Format NPM: Wajib 6 - 10 digit angka saja (mencegah teks aneh / SQL Injection payload)
+  const npmRegex = /^[0-9]{6,10}$/;
   if (!npmRegex.test(npm)) {
-    return res.status(400).json({ error: 'NPM harus berupa angka 8 hingga 10 digit!' });
+    return res.status(400).json({ error: 'Waduh, NPM kamu harus 6 sampai 10 digit angka ya!' });
   }
 
   // 2. Validasi Format Email
