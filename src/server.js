@@ -55,11 +55,30 @@ function authRole(...allowedRoles) {
   };
 }
 
+// =========================================================================
+// ENDPOINT REGISTER (DILENGKAPI VALIDASI NPM & EMAIL)
+// =========================================================================
 app.post('/api/auth/register', async (req, res) => {
   const { npm, nama, email, password, no_wa, preferensi, relasi, selected_ringtone } = req.body;
+  
   if (!npm || !nama || !email || !password || !preferensi) {
     return res.status(400).json({ error: 'npm, nama, email, password, preferensi wajib diisi' });
   }
+
+  // --- VALIDASI TAMBAHAN SERVER-SIDE ---
+  // 1. Validasi Format NPM: Wajib 8 - 10 digit angka saja (mencegah teks aneh / SQL Injection payload)
+  const npmRegex = /^[0-9]{8,10}$/;
+  if (!npmRegex.test(npm)) {
+    return res.status(400).json({ error: 'NPM harus berupa angka 8 hingga 10 digit!' });
+  }
+
+  // 2. Validasi Format Email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Format email tidak valid!' });
+  }
+
+  // 3. Validasi Preferensi Notifikasi & Relasi
   if (!['nomor_wa', 'nada_dering'].includes(preferensi)) {
     return res.status(400).json({ error: 'preferensi harus nomor_wa atau nada_dering' });
   }
@@ -227,7 +246,6 @@ app.get('/api/tasks/:id/recap', authRole('admin'), async (req, res) => {
       return res.status(404).json({ error: 'Tugas tidak ditemukan' });
     }
 
-    // Mahasiswa (role user) yang sudah menekan Mark As Done untuk tugas ini
     const sudahResult = await client.query(
       `SELECT u.id_user AS "id_user", u.nama AS "nama"
        FROM users u
@@ -237,7 +255,6 @@ app.get('/api/tasks/:id/recap', authRole('admin'), async (req, res) => {
       [idTugas]
     );
 
-    // Mahasiswa (role user) yang belum menekan Mark As Done untuk tugas ini
     const belumResult = await client.query(
       `SELECT u.id_user AS "id_user", u.nama AS "nama"
        FROM users u
