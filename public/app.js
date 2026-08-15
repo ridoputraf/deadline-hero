@@ -7,7 +7,7 @@
  // Daftar nada dering (file ada di /public/Sounds/)
   const RINGTONE_OPTIONS = [
     { value: '/Sounds/ringtone1.mp3', label: 'Bruno Mars - Risk It All' },
-    { value: '/Sounds/ringtone2.mp3', label: 'Cameron Boyce - OBH Combi Sachet' },
+    { value: '/Sounds/ringtone2.mp3', label: 'Naykilla - OBH Combi Sachet' },
     { value: '/Sounds/ringtone3.mp3', label: 'Sal Priadi - Foto Kita Blur' },
   ];
   const DEFAULT_RINGTONE = RINGTONE_OPTIONS[0].value;
@@ -236,10 +236,10 @@
     const preferensi = f.preferensi.value;
     const npm = f.npm.value.trim();
 
-    // Validasi frontend: NPM wajib 8-10 digit angka (sama seperti aturan backend)
-    if (!/^[0-9]{8,10}$/.test(npm)) {
+    // Validasi frontend: NPM wajib 6-10 digit angka (sama seperti aturan backend)
+    if (!/^[0-9]{6,10}$/.test(npm)) {
       msg.className = 'msg error';
-      msg.textContent = 'Waduh, NPM kamu harus 8-10 digit angka nih!';
+      msg.textContent = 'Waduh, NPM kamu harus 6 sampai 10 digit angka ya!';
       f.npm.focus();
       return;
     }
@@ -292,9 +292,9 @@
     // Fallback ringtone jika backend belum kirim kolom (DB lama)
     if (!u.selected_ringtone) u.selected_ringtone = DEFAULT_RINGTONE;
 
-    $('#user-nama').textContent = u.nama || 'User';
+    $('#user-nama').textContent = u.nama || 'Jangan Lupa Isi Nama Kamu';
     $('#user-role').textContent = u.role || 'user';
-    $('#user-avatar').textContent = (u.nama || 'U').charAt(0).toUpperCase();
+    $('#user-avatar').textContent = (u.nama || 'Jangan Lupa Isi Nama Kamu').charAt(0).toUpperCase();
 
     // Sapaan: nama depan saja
     const firstName = (u.nama || 'Hero').split(' ')[0];
@@ -440,17 +440,17 @@
       if (state.activeTab === 'Tugas') {
         if (isAdmin) {
           // Admin tidak menandai tugas selesai sendiri, cukup melihat rekap pengerjaan mahasiswa
-          actionBtn = `<button class="btn-detail" data-id="${t.id}" data-judul="${escapeHtml(t.judul)}" type="button">Detail</button>`;
+          actionBtn = `<button class="btn-3d btn-3d--sm" data-id="${t.id}" data-judul="${escapeHtml(t.judul)}" type="button"><span class="button_top">Detail</span></button>`;
         } else {
           const deadlineMs = new Date(t.deadline).getTime();
           const isExpired = !isNaN(deadlineMs) && deadlineMs < Date.now();
 
           if (done) {
-            actionBtn = `<button class="btn-done done" type="button" disabled>Selesai</button>`;
+            actionBtn = `<button class="btn-3d btn-3d--sm btn-3d--done done" type="button" disabled><span class="button_top">Selesai</span></button>`;
           } else if (isExpired) {
-            actionBtn = `<button class="btn-done missed" type="button" disabled>Terlewat</button>`;
+            actionBtn = `<button class="btn-3d btn-3d--sm btn-3d--done missed" type="button" disabled><span class="button_top">Terlewat</span></button>`;
           } else {
-            actionBtn = `<button class="btn-done" data-id="${t.id}" type="button">Mark As Done</button>`;
+            actionBtn = `<button class="btn-3d btn-3d--sm btn-3d--done" data-id="${t.id}" type="button"><span class="button_top">Mark As Done</span></button>`;
           }
         }
       }
@@ -470,11 +470,11 @@
       list.appendChild(li);
     }
 
-    $$('.btn-done[data-id]', list).forEach((btn) => {
+    $$('.btn-3d--done[data-id]', list).forEach((btn) => {
       btn.addEventListener('click', () => toggleDone(Number(btn.dataset.id)));
     });
 
-    $$('.btn-detail', list).forEach((btn) => {
+    $$('.btn-3d--sm[data-judul]', list).forEach((btn) => {
       btn.addEventListener('click', () => openRecapModal(Number(btn.dataset.id), btn.dataset.judul));
     });
   }
@@ -781,7 +781,7 @@
           return `<label>${f.label}
             <div class="select-preview-row">
               ${selectHtml}
-              <button type="button" class="btn-preview" data-preview="${f.name}">Tes</button>
+              <button type="button" class="btn-3d btn-3d--sm btn-preview" data-preview="${f.name}"><span class="button_top">Tes</span></button>
             </div>
           </label>`;
         }
@@ -796,7 +796,7 @@
         ${fieldHtml}
         <div class="modal-actions">
           <button type="button" class="btn-secondary">Batal</button>
-          <button type="submit" class="btn-primary modal-btn">Simpan</button>
+          <button type="submit" class="btn-3d btn-3d--primary modal-btn"><span class="button_top">Simpan</span></button>
         </div>
       </form>
     `;
@@ -816,18 +816,18 @@
         if (activeAudio && btn.dataset.playing === '1') {
           stopRingtone();
           btn.dataset.playing = '0';
-          btn.textContent = 'Tes';
+          ($('.button_top', btn) || btn).textContent = 'Tes';
           btn.classList.remove('playing');
           return;
         }
         const audio = playRingtone(sel.value);
         if (!audio) return;
         btn.dataset.playing = '1';
-        btn.textContent = 'Stop';
+        ($('.button_top', btn) || btn).textContent = 'Stop';
         btn.classList.add('playing');
         audio.addEventListener('ended', () => {
           btn.dataset.playing = '0';
-          btn.textContent = 'Tes';
+          ($('.button_top', btn) || btn).textContent = 'Tes';
           btn.classList.remove('playing');
         });
       });
@@ -920,11 +920,11 @@
   const RUNG_PREFIX = 'ringtone_played_task_';
 
   function hasRung(id) {
-    try { return localStorage.getItem(RUNG_PREFIX + id) === '1'; }
+    try { return localStorage.getItem(RUNG_PREFIX + id) === 'true'; }
     catch (_) { return false; }
   }
   function markRung(id) {
-    try { localStorage.setItem(RUNG_PREFIX + id, '1'); }
+    try { localStorage.setItem(RUNG_PREFIX + id, 'true'); }
     catch (_) { /* storage penuh/diblokir — biarkan alarm tetap bunyi sekali per sesi */ }
   }
   // Cek apakah tugas `id` yang sedang berbunyi masih valid untuk terus berbunyi:
@@ -1034,7 +1034,7 @@
     const map = {
       'Email atau password salah': 'Waduh, email atau password kamu keliru. Coba cek lagi ya.',
       'Email sudah terdaftar': 'Email ini sudah pernah dipakai. Langsung masuk saja, atau pakai email lain ya.',
-      'NPM harus berupa angka 8 hingga 10 digit!': 'Waduh, NPM kamu harus 8-10 digit angka nih!',
+      'NPM harus berupa angka 6 hingga 10 digit!': 'Waduh, NPM kamu harus 6 sampai 10 digit angka ya!',
       'Format email tidak valid!': 'Hmm, format email kamu kelihatannya belum benar. Coba dicek ya.',
       'no_wa wajib diisi jika preferensi nomor_wa': 'Nomor WhatsApp-nya masih kosong nih. Isi dulu ya.',
       'npm, nama, email, password, preferensi wajib diisi': 'Masih ada kolom yang kosong. Lengkapi dulu ya.',
