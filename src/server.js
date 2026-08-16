@@ -304,6 +304,13 @@ app.post('/api/admin/archive-all', authRole('admin'), async (req, res) => {
   let client;
   try {
     client = await getConnection();
+    // Tolak dulu kalau tidak ada tugas sama sekali — lebih jelas daripada
+    // mengunduh file Excel kosong.
+    const cek = await client.query(`SELECT COUNT(*)::int AS "jumlah" FROM tasks`);
+    if (cek.rows[0].jumlah === 0) {
+      return res.status(400).json({ error: 'Belum ada tugas yang bisa direkap.' });
+    }
+
     const arc = await client.query(
       `UPDATE tasks SET is_archived = TRUE, archived_at = NOW()
        WHERE COALESCE(is_archived, FALSE) = FALSE`
@@ -430,6 +437,9 @@ app.get('/api/recap/admin/:id/export', authRole('user'), async (req, res) => {
     client = await getConnection();
     const data = await getRiwayatRows(client, idAdmin, res.locals.idUser);
     if (!data) return res.status(404).json({ error: 'Admin tidak ditemukan' });
+    if (!data.tugas.length) {
+      return res.status(400).json({ error: 'Belum ada tugas dari admin ini yang bisa diekspor.' });
+    }
 
     const me = await client.query(
       `SELECT nama AS "nama" FROM users WHERE id_user = $1`,

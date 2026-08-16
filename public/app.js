@@ -134,21 +134,26 @@
     return data;
   }
 
-  /* Unduh file (blob) dari endpoint API — untuk export Excel rekap. */
-  async function apiDownload(path, filename) {
+  /* Unduh file (blob) dari endpoint API — untuk export Excel rekap.
+   * opts.method penting untuk endpoint POST (mis. /api/admin/archive-all);
+   * fetch tanpa method default GET dan endpoint POST akan 404. */
+  async function apiDownload(path, filename, opts = {}) {
     const headers = {};
     if (state.user) {
       headers['x-user-id'] = String(state.user.id_user);
       headers['x-user-role'] = state.user.role;
     }
-    const res = await fetch(`${API}${path}`, { headers });
+    const res = await fetch(`${API}${path}`, { ...opts, headers });
     if (!res.ok) {
       let data = {};
       try { data = await res.json(); } catch (_) { /* respons bukan JSON */ }
-      throw new Error(data.error || 'Download gagal');
+      throw new Error(data.error || 'Download gagal. Coba lagi sebentar ya.');
     }
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
+    if (!blob.size) {
+      throw new Error('File-nya kosong. Coba lagi sebentar ya.');
+    }
+    const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
@@ -331,10 +336,16 @@
     $('#menu-change-email').classList.toggle('hidden', isAdmin);
     $('#menu-preferences').classList.toggle('hidden', isAdmin);
     $('#menu-recap').classList.toggle('hidden', isAdmin);
+    $('#menu-archive').classList.toggle('hidden', !isAdmin);
 
     // Sembunyikan hero section untuk admin
     const heroSection = $('.hero');
     if (heroSection) heroSection.classList.toggle('hidden', isAdmin);
+
+    // Reset state tab secara tegas: selalu mulai dari view tersimpan,
+    // fallback "Daftar" — mencegah panel Input & Daftar tampil bersamaan
+    // saat refresh atau login pertama.
+    switchView(isAdmin ? (state.activeView === 'admin' ? 'admin' : 'tasks') : 'tasks');
 
     fetchTasks();
     startDeadlineChecker();
@@ -826,24 +837,18 @@
     });
   }
 
-  /* ===== Admin: Rekap & Arsip Semua Tugas (unduh Excel) ===== */
-  const archiveAllBtn = $('#archive-all-btn');
-  if (archiveAllBtn) {
-    archiveAllBtn.addEventListener('click', async () => {
-      const yakin = window.confirm('Apakah Anda yakin ingin menarik semua tugas karena sudah waktunya merekap nilai?');
-      if (!yakin) return;
-      archiveAllBtn.disabled = true;
-      try {
-        const stamp = new Date().toISOString().slice(0, 10);
-        await apiDownload('/api/admin/archive-all', `rekap-semua-tugas-${stamp}.xlsx`);
-        toast('Rekap terunduh. Semua tugas udah ditarik ke arsip.');
-        fetchTasks();
-      } catch (err) {
-        toast(humanizeError(err));
-      } finally {
-        archiveAllBtn.disabled = false;
-      }
-    });
+  /* ===== Admin: Rekap & Arsip Semua Tugas (unduh Excel, dari menu profile) ===== */
+  async function runArchiveAll() {
+    const yakin = window.confirm('Apakah Anda yakin ingin menarik semua tugas karena sudah waktunya merekap nilai?');
+    if (!yakin) return;
+    try {
+      const stamp = new Date().toISOString().slice(0, 10);
+      await apiDownload('/api/admin/archive-all', `rekap-semua-tugas-${stamp}.xlsx`, { method: 'POST' });
+      toast('Rekap terunduh. Semua tugas udah ditarik ke arsip.');
+      fetchTasks();
+    } catch (err) {
+      toast(humanizeError(err));
+    }
   }
 
   /* ===== Header Menu (profile-trigger) ===== */
@@ -877,12 +882,16 @@
       case 'recap':
         openUserRecapModal();
         break;
+      case 'archive-recap':
+        runArchiveAll();
+        break;
       case 'logout':
         stopDeadlineChecker();
         stopTasksPolling();
         pendingRingtone = null;
         currentRecapTaskId = null;
         currentRecapModalEl = null;
+        state.activeView = 'tasks';
         clearSession();
         state.user = null;
         $('#app-view').classList.add('hidden');
@@ -1080,36 +1089,26 @@
     });
   }
 
-  /* ===== Bottom Nav ===== */
-  $$('.nav-item').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const view = btn.dataset.view;
-      state.activeView = view;
-      $$('.nav-item').forEach((b) => b.classList.toggle('active', b === btn));
+  /* ===== Bottom Nav =====
+   * Satu-satunya pengatur tampilan panel: pastikan "Daftar" dan "Input"
+   * selalu eksklusif (yang satu hidden, yang lain tampil). */
+  function switchView(view) {
+    const isAdmin = state.user && state.user.role === 'admin';
+    const target = view === 'admin' && isAdmin ? 'admin' : 'tasks';
+    state.activeView = target;
 
-      const card = $('.card');
-      const admin = $('#admin-panel');
-      card.classList.remove('hidden');
-      admin.classList.add('hidden');
+    const tasksPanel = $('#tasks-panel');
+    const adminPanel = $('#admin-panel');
+    tasksPanel.classList.toggle('hidden', target !== 'tasks');
+    adminPanel.classList.toggle('hidden', target !== 'admin');
 
-      if (view === 'admin') {
-        admin.classList.remove('hidden');
-        card.classList.add('hidden');
-      } else if (view === 'profile') {
-        openProfileModal();
-      }
-    });
-  });
-
-  function openProfileModal() {
-    const u = state.user || {};
-    openModal('Profil', [
-      { name: '_nama', type: 'text', label: 'Nama' },
-    ], async () => { toast('Profil bersifat read-only'); });
-    const inp = $('#modal-host [name="_nama"]');
-    if (inp) inp.value = u.nama || '';
-    inp && (inp.readOnly = true);
+    $$('.nav-item').forEach((b) =>
+      b.classList.toggle('active', b.dataset.view === target));
   }
+
+  $$('.nav-item').forEach((btn) => {
+    btn.addEventListener('click', () => switchView(btn.dataset.view));
+  });
 
   /* ===== Deadline Sound Checker (client-side trigger) =====
    * Dipanggil setiap GET /api/tasks selesai + tiap 30 detik.

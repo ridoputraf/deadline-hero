@@ -538,7 +538,9 @@ a { color: var(--primary-hover); }
 #app-view {
   max-width: 840px;
   margin: 0 auto;
-  padding-bottom: 104px;
+  /* Ruang napas untuk bottom nav yang position:fixed (z-index 30)
+     supaya nav tidak menutupi card/form terakhir. */
+  padding-bottom: 120px;
 }
 
 .header-bar {
