@@ -278,11 +278,23 @@ app.post('/api/tasks', authRole('admin'), async (req, res) => {
     const resolvedDeskripsi = deskripsi || null;
     const resolvedSumberWeb = kategori === 'Tugas' ? sumber_web : null;
 
+    // Deadline: dukung 'DD/MM/YYYY HH:mm' dan 'YYYY-MM-DDTHH:mm' (datetime-local)
+    const dlSlash = deadline.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2})$/);
+    const dlIso = deadline.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})$/);
+    let isoDeadline;
+    if (dlSlash) {
+      isoDeadline = `${dlSlash[3]}-${dlSlash[1]}-${dlSlash[2]}T${dlSlash[4]}`;
+    } else if (dlIso) {
+      isoDeadline = deadline;
+    } else {
+      return res.status(400).json({ error: 'Format deadline tidak dikenali. Gunakan DD/MM/YYYY HH:mm atau YYYY-MM-DDTHH:mm' });
+    }
+
     const result = await client.query(
       `INSERT INTO tasks (judul, deskripsi, kategori, sumber_web, deadline, created_by, is_archived)
        VALUES ($1, $2, $3, $4, TO_TIMESTAMP($5, 'YYYY-MM-DD"T"HH24:MI'), $6, FALSE)
        RETURNING id_tugas`,
-      [judul, resolvedDeskripsi, kategori, resolvedSumberWeb, deadline, res.locals.idUser]
+      [judul, resolvedDeskripsi, kategori, resolvedSumberWeb, isoDeadline, res.locals.idUser]
     );
     const idTugas = result.rows[0].id_tugas;
     // Tugas baru: cek instan kalau deadlinenya langsung masuk rentang H-1 jam
