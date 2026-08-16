@@ -4,7 +4,7 @@ const path = require('path');
 require('dotenv').config();
 
 const { initPool, getConnection, closePool, sanitizeError, getPool } = require('./db');
-const { startBot, getBotStatus } = require('./bot');
+const { startBot, getBotStatus, triggerInstantCheck } = require('./bot');
 
 const app = express();
 app.use(cors());
@@ -25,7 +25,7 @@ const DEFAULT_RINGTONE = '/Sounds/ringtone1.mp3';
 
 app.get('/api/bot/qr', (req, res) => {
   const { ready, qrDataUrl } = getBotStatus();
-  if (ready) return res.send('Bot WhatsApp sudah terhubung ✅ Tidak perlu scan lagi.');
+  if (ready) return res.send('Bot WhatsApp sudah terhubung. Tidak perlu scan lagi.');
   if (!qrDataUrl) return res.send('QR belum siap, refresh beberapa detik lagi...');
   res.send(`<img src="${qrDataUrl}" alt="QR WhatsApp" />`);
 });
@@ -119,6 +119,8 @@ app.post('/api/auth/register', async (req, res) => {
       [npm, nama, email, password, resolvedNoWa, preferensi, resolvedRelasi, resolvedRingtone]
     );
     const idUser = result.rows[0].id_user;
+    // Mahasiswa baru: cek instan apakah ada tugas lama yang deadlinenya sudah H-1 jam
+    if (process.env.ENABLE_BOT === 'true') triggerInstantCheck('register');
     return res.status(201).json({ message: 'Registrasi berhasil', id_user: idUser });
   } catch (err) {
     console.error('REGISTER ERR:', sanitizeError(err));
@@ -219,6 +221,8 @@ app.post('/api/tasks', authRole('admin'), async (req, res) => {
       [judul, resolvedDeskripsi, kategori, resolvedSumberWeb, deadline, res.locals.idUser]
     );
     const idTugas = result.rows[0].id_tugas;
+    // Tugas baru: cek instan kalau deadlinenya langsung masuk rentang H-1 jam
+    if (process.env.ENABLE_BOT === 'true') triggerInstantCheck('tugas-baru');
     return res.status(201).json({ message: 'Tugas berhasil dibuat', id_tugas: idTugas });
   } catch (err) {
     console.error('CREATE TASK ERR:', sanitizeError(err));
