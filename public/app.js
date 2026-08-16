@@ -378,6 +378,7 @@
       kategori: safe(get(raw, 'kategori', 'KATEGORI')) || 'Tugas',
       sumber: safe(get(raw, 'sumber_web', 'SUMBER_WEB')),
       deadline: safe(get(raw, 'deadline', 'DEADLINE')),
+      created_by: get(raw, 'created_by', 'CREATED_BY'),
       status: (rawStatus.includes('selesai') || rawStatus === 'done' || rawStatus === '1') ? 'selesai' : 'belum',
     };
   }
@@ -440,7 +441,7 @@
       if (state.activeTab === 'Tugas') {
         if (isAdmin) {
           // Admin tidak menandai tugas selesai sendiri, cukup melihat rekap pengerjaan mahasiswa
-          actionBtn = `<button class="btn-3d btn-3d--sm" data-id="${t.id}" data-judul="${escapeHtml(t.judul)}" type="button"><span class="button_top">Detail</span></button>`;
+          actionBtn = `<button class="btn-3d btn-3d--sm" data-id="${t.id}" data-judul="${escapeHtml(t.judul)}" data-createdby="${t.created_by ?? ''}" type="button"><span class="button_top">Detail</span></button>`;
         } else {
           const deadlineMs = new Date(t.deadline).getTime();
           const isExpired = !isNaN(deadlineMs) && deadlineMs < Date.now();
@@ -475,15 +476,25 @@
     });
 
     $$('.btn-3d--sm[data-judul]', list).forEach((btn) => {
-      btn.addEventListener('click', () => openRecapModal(Number(btn.dataset.id), btn.dataset.judul));
+      btn.addEventListener('click', () => {
+        const createdBy = btn.dataset.createdby ? Number(btn.dataset.createdby) : null;
+        openRecapModal(Number(btn.dataset.id), btn.dataset.judul, createdBy);
+      });
     });
   }
 
   /* ===== Modal Rekapitulasi (khusus Admin) ===== */
   let currentRecapTaskId = null;
+  let currentRecapCreatedBy = null;
   let currentRecapModalEl = null;
 
   function renderRecapContent(modal, judul, sudah, belum) {
+    // Tombol hapus hanya untuk admin yang membuat tugas ini (ownership control)
+    const isOwner = !!(state.user
+      && state.user.role === 'admin'
+      && currentRecapCreatedBy !== null
+      && Number(currentRecapCreatedBy) === Number(state.user.id_user));
+
     modal.innerHTML = `
       <h3>Rekap: ${escapeHtml(judul)}</h3>
       <div class="recap-section">
@@ -504,18 +515,38 @@
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-secondary recap-close">Tutup</button>
+        ${isOwner ? `
+        <button type="button" class="btn-3d btn-3d--sm btn-3d--danger recap-delete"><span class="button_top">Hapus Tugas</span></button>` : ''}
       </div>
     `;
     $('.recap-close', modal).addEventListener('click', closeRecapModal);
+    const delBtn = $('.recap-delete', modal);
+    if (delBtn) delBtn.addEventListener('click', () => deleteTask(currentRecapTaskId, judul));
+  }
+
+  /* Hapus tugas (hanya admin pembuat tugas). Konfirmasi dulu, lalu panggil
+   * DELETE /api/tasks/:id, tutup modal, dan segarkan daftar tugas. */
+  async function deleteTask(idTugas, judul) {
+    if (!idTugas) return;
+    if (!window.confirm(`Yakin mau hapus tugas "${judul}"? Tindakan ini nggak bisa dibatalkan.`)) return;
+    try {
+      await api(`/api/tasks/${idTugas}`, { method: 'DELETE' });
+      toast('Tugas udah dihapus.');
+      closeRecapModal();
+      fetchTasks();
+    } catch (err) {
+      toast(humanizeError(err));
+    }
   }
 
   function closeRecapModal() {
     $('#modal-host').innerHTML = '';
     currentRecapTaskId = null;
+    currentRecapCreatedBy = null;
     currentRecapModalEl = null;
   }
 
-  async function openRecapModal(idTugas, judul) {
+  async function openRecapModal(idTugas, judul, createdBy = null) {
     const host = $('#modal-host');
     host.innerHTML = '';
     stopRingtone();
@@ -535,6 +566,7 @@
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closeRecapModal(); });
 
     currentRecapTaskId = idTugas;
+    currentRecapCreatedBy = createdBy;
     currentRecapModalEl = modal;
 
     try {
@@ -632,7 +664,8 @@
             deskripsi: taskForm.deskripsi.value.trim(),
             kategori: taskForm.kategori.value,
             sumber_web: taskForm.kategori.value === 'Tugas' ? taskForm.sumber_web.value : null,
-            deadline: taskForm.deadline.value,
+            // Potong komponen detik (:ss) — backend hanya butuh YYYY-MM-DDTHH:mm
+            deadline: taskForm.deadline.value.slice(0, 16),
           }),
         });
         msg.className = 'msg success';

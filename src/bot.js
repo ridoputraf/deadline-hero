@@ -20,6 +20,7 @@ const client = new Client({
       '--disable-accelerated-2d-canvas',
       '--no-first-run',
       '--no-zygote',
+      '--single-process',
       '--disable-gpu'
     ],
   },
@@ -68,17 +69,21 @@ function normalizePhone(raw) {
   return '62' + s + '@c.us';
 }
 
-/* Sisa waktu deadline dalam menit (dibulatkan ke atas) */
-function sisaMenitLabel(sisaDetik) {
-  const menit = Math.max(1, Math.ceil(Number(sisaDetik) / 60));
-  return `sekitar ${menit} menit lagi`;
+/* Sisa waktu deadline dalam menit (dibulatkan ke bawah), dihitung murni di Node.js */
+function diffMinutes(deadlineStr) {
+  return Math.floor((new Date(deadlineStr) - new Date()) / (1000 * 60));
 }
 
-/* Template pesan H-1 jam berdasarkan relasi penerima.
+function sisaMenitLabel(menit) {
+  if (menit <= 1) return 'tinggal hitungan menit lagi';
+  return `${menit} menit lagi`;
+}
+
+/* Template pesan pengingat berdasarkan relasi penerima.
  * Detail tugas: nama mahasiswa, nama tugas, kategori (mata kuliah), sisa waktu. */
 function buildMessage(t) {
   const relasi = String(t.relasi || '').toLowerCase();
-  const sisa = sisaMenitLabel(t.sisa_detik);
+  const sisa = sisaMenitLabel(diffMinutes(t.deadline));
   const detail =
     `Nama Mahasiswa : ${t.nama}\n` +
     `Nama Tugas     : ${t.judul}\n` +
@@ -117,9 +122,12 @@ function buildMessage(t) {
   );
 }
 
-/* Ambil tugas H-1 jam: belum selesai, sisa waktu 50-60 menit, belum pernah dikirim.
+/* Ambil kandidat tugas: belum selesai, deadline masih di masa depan dan
+ * maksimal 60 menit dari sekarang (termasuk tugas mendadak 30m/15m).
+ * Tanpa filter preferensi: selama nomor WA valid, wajib dikirim.
  * LEFT JOIN user_task_status supaya user yang belum pernah menandai status
- * (belum punya baris status) tetap dianggap "belum" dan ikut diingatkan. */
+ * (belum punya baris status) tetap dianggap "belum" dan ikut diingatkan.
+ * Verifikasi final selisih menit dilakukan di Node.js (lihat runCheck). */
 async function getImminentTasks() {
   const conn = await getConnection();
   try {
@@ -127,7 +135,7 @@ async function getImminentTasks() {
       `SELECT u.id_user AS "id_user", u.nama AS "nama", u.no_wa AS "no_wa", u.relasi AS "relasi",
               t.id_tugas AS "id_tugas", t.judul AS "judul", t.kategori AS "kategori",
               t.sumber_web AS "sumber_web",
-              EXTRACT(EPOCH FROM (t.deadline - NOW())) AS "sisa_detik"
+              TO_CHAR(t.deadline, 'YYYY-MM-DD"T"HH24:MI:SS') AS "deadline"
        FROM users u
        CROSS JOIN tasks t
        LEFT JOIN user_task_status uts
@@ -135,10 +143,9 @@ async function getImminentTasks() {
        LEFT JOIN notification_log nl
          ON nl.id_user = u.id_user AND nl.id_tugas = t.id_tugas AND nl.jenis = 'wa_h1jam'
        WHERE u.role = 'user'
-         AND u.preferensi = 'nomor_wa'
-         AND u.no_wa IS NOT NULL
+         AND TRIM(COALESCE(u.no_wa, '')) <> ''
          AND COALESCE(uts.status, 'belum') != 'selesai'
-         AND t.deadline >  NOW() + INTERVAL '50 minutes'
+         AND t.deadline > NOW()
          AND t.deadline <= NOW() + INTERVAL '60 minutes'
          AND nl.id_notif IS NULL`
     );
@@ -168,10 +175,14 @@ async function runCheck() {
   }
   if (!tasks || !tasks.length) return;
 
-  console.log(`[WA BOT] Menemukan ${tasks.length} antrian notifikasi H-1 jam.`);
+  console.log(`[WA BOT] Menemukan ${tasks.length} antrian pengingat (sisa waktu <= 60 menit).`);
   const conn = await getConnection();
   try {
     for (const t of tasks) {
+      // Verifikasi final selisih waktu murni di Node.js: 0 < menit <= 60
+      const sisaMenit = diffMinutes(t.deadline);
+      if (!(sisaMenit > 0 && sisaMenit <= 60)) continue;
+
       const chatId = normalizePhone(t.no_wa);
       if (!chatId) {
         console.warn(`[WA BOT] nomor WA kosong/invalid untuk user=${t.id_user}, dilewati.`);
@@ -182,7 +193,7 @@ async function runCheck() {
         continue;
       }
       try {
-        console.log(`[WA BOT] Mengirim pesan H-1 jam ke nomor ${chatId} (user=${t.id_user}, tugas #${t.id_tugas} "${t.judul}")...`);
+        console.log(`[WA BOT] Mengirim pesan H-1 jam (sisa ${sisaMenit} menit) ke nomor ${chatId} (user=${t.id_user}, tugas #${t.id_tugas} "${t.judul}")...`);
         const terdaftar = await client.isRegisteredUser(chatId);
         if (!terdaftar) {
           console.warn(`[WA BOT] nomor tidak terdaftar di WhatsApp: ${chatId}. Dilewati.`);
@@ -195,7 +206,7 @@ async function runCheck() {
         console.error(`[WA BOT] kirim gagal ke ${chatId}:`, sanitizeError(err));
       }
     }
-    console.log('[WA BOT] Antrian notifikasi H-1 jam selesai diproses.');
+    console.log('[WA BOT] Antrian pengingat selesai diproses.');
   } finally {
     conn.release();
   }

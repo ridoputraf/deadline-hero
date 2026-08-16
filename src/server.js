@@ -4,7 +4,7 @@ const path = require('path');
 require('dotenv').config();
 
 const { initPool, getConnection, closePool, sanitizeError, getPool } = require('./db');
-const { startBot, getBotStatus, triggerInstantCheck } = require('./bot');
+const { startBot, getBotStatus, triggerInstantCheck, runCheck } = require('./bot');
 
 const app = express();
 app.use(cors());
@@ -28,6 +28,27 @@ app.get('/api/bot/qr', (req, res) => {
   if (ready) return res.send('Bot WhatsApp sudah terhubung. Tidak perlu scan lagi.');
   if (!qrDataUrl) return res.send('QR belum siap, refresh beberapa detik lagi...');
   res.send(`<img src="${qrDataUrl}" alt="QR WhatsApp" />`);
+});
+
+/* Trigger manual pengiriman pengingat WA lewat URL browser (keperluan testing). */
+app.get('/api/bot/force-trigger', async (req, res) => {
+  if (process.env.ENABLE_BOT !== 'true') {
+    return res.status(503).json({ ok: false, message: 'Bot WhatsApp tidak aktif. Set ENABLE_BOT=true dulu.' });
+  }
+  try {
+    console.log('[WA BOT] Force-trigger dikirim lewat URL.');
+    await runCheck();
+    const { ready } = getBotStatus();
+    return res.json({
+      ok: ready,
+      message: ready
+        ? 'Trigger pengingat WA sudah dijalankan. Cek log server untuk hasilnya.'
+        : 'Bot belum ready (scan QR di /api/bot/qr dulu). Trigger dijalankan, tapi antrian ditunda.'
+    });
+  } catch (err) {
+    console.error('FORCE TRIGGER ERR:', sanitizeError(err));
+    return res.status(500).json({ ok: false, message: 'Trigger gagal dijalankan.' });
+  }
 });
 
 app.use(async (req, res, next) => {
@@ -216,7 +237,7 @@ app.post('/api/tasks', authRole('admin'), async (req, res) => {
 
     const result = await client.query(
       `INSERT INTO tasks (judul, deskripsi, kategori, sumber_web, deadline, created_by)
-       VALUES ($1, $2, $3, $4, TO_TIMESTAMP($5, 'YYYY-MM-DD"T"HH24:MI:SS'), $6)
+       VALUES ($1, $2, $3, $4, TO_TIMESTAMP($5, 'YYYY-MM-DD"T"HH24:MI'), $6)
        RETURNING id_tugas`,
       [judul, resolvedDeskripsi, kategori, resolvedSumberWeb, deadline, res.locals.idUser]
     );
@@ -226,6 +247,44 @@ app.post('/api/tasks', authRole('admin'), async (req, res) => {
     return res.status(201).json({ message: 'Tugas berhasil dibuat', id_tugas: idTugas });
   } catch (err) {
     console.error('CREATE TASK ERR:', sanitizeError(err));
+    return res.status(500).json({ error: 'Terjadi kesalahan server' });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+/* Hapus tugas — hanya admin PEMBUAT tugas tersebut (ownership control). */
+app.delete('/api/tasks/:id', authRole('admin'), async (req, res) => {
+  const idTugas = Number(req.params.id);
+  if (isNaN(idTugas)) {
+    return res.status(400).json({ error: 'ID tugas tidak valid' });
+  }
+
+  let client;
+  try {
+    client = await getConnection();
+    const cek = await client.query(
+      `SELECT created_by FROM tasks WHERE id_tugas = $1`,
+      [idTugas]
+    );
+    if (cek.rows.length === 0) {
+      return res.status(404).json({ error: 'Tugas tidak ditemukan' });
+    }
+    if (Number(cek.rows[0].created_by) !== Number(res.locals.idUser)) {
+      return res.status(403).json({ error: 'Kamu cuma bisa hapus tugas yang kamu buat sendiri' });
+    }
+
+    // Hapus baris anak dulu (FK tanpa ON DELETE CASCADE), lalu tugasnya.
+    await client.query('BEGIN');
+    await client.query('DELETE FROM notification_log WHERE id_tugas = $1', [idTugas]);
+    await client.query('DELETE FROM user_task_status WHERE id_tugas = $1', [idTugas]);
+    await client.query('DELETE FROM tasks WHERE id_tugas = $1', [idTugas]);
+    await client.query('COMMIT');
+
+    return res.json({ message: 'Tugas berhasil dihapus' });
+  } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    console.error('DELETE TASK ERR:', sanitizeError(err));
     return res.status(500).json({ error: 'Terjadi kesalahan server' });
   } finally {
     if (client) client.release();

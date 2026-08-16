@@ -500,6 +500,13 @@ a { color: var(--primary-hover); }
 }
 .dark .btn-3d--done { --button_color: var(--dark-success); --button_text: #062B21; }
 
+/* Varian bahaya (Hapus Tugas) */
+.btn-3d--danger {
+  --button_color: var(--accent);
+  --button_text: #401212; /* AA di atas #FF6B6B */
+}
+.dark .btn-3d--danger { --button_color: #FF7B7B; --button_text: #2E0B0B; }
+
 /* State Selesai/Terlewat: padat, tanpa efek angkat */
 .btn-3d.done .button_top,
 .btn-3d.missed .button_top {
