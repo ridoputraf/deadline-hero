@@ -279,8 +279,8 @@ app.post('/api/tasks', authRole('admin'), async (req, res) => {
     const resolvedSumberWeb = kategori === 'Tugas' ? sumber_web : null;
 
     const result = await client.query(
-      `INSERT INTO tasks (judul, deskripsi, kategori, sumber_web, deadline, created_by)
-       VALUES ($1, $2, $3, $4, TO_TIMESTAMP($5, 'YYYY-MM-DD"T"HH24:MI'), $6)
+      `INSERT INTO tasks (judul, deskripsi, kategori, sumber_web, deadline, created_by, is_archived)
+       VALUES ($1, $2, $3, $4, TO_TIMESTAMP($5, 'YYYY-MM-DD"T"HH24:MI'), $6, FALSE)
        RETURNING id_tugas`,
       [judul, resolvedDeskripsi, kategori, resolvedSumberWeb, deadline, res.locals.idUser]
     );
@@ -289,8 +289,11 @@ app.post('/api/tasks', authRole('admin'), async (req, res) => {
     if (process.env.ENABLE_BOT === 'true') triggerInstantCheck('tugas-baru');
     return res.status(201).json({ message: 'Tugas berhasil dibuat', id_tugas: idTugas });
   } catch (err) {
-    console.error('CREATE TASK ERR:', sanitizeError(err));
-    return res.status(500).json({ error: 'Terjadi kesalahan server' });
+    console.error('Error insert task:', err);
+    return res.status(500).json({
+      error: 'Gagal menyimpan tugas',
+      detail: err.message
+    });
   } finally {
     if (client) client.release();
   }
