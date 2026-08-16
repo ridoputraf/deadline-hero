@@ -145,6 +145,7 @@ async function getImminentTasks() {
        WHERE u.role = 'user'
          AND TRIM(COALESCE(u.no_wa, '')) <> ''
          AND COALESCE(uts.status, 'belum') != 'selesai'
+         AND COALESCE(t.is_archived, FALSE) = FALSE
          AND t.deadline > NOW()
          AND t.deadline <= NOW() + INTERVAL '60 minutes'
          AND nl.id_notif IS NULL`

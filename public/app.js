@@ -134,6 +134,30 @@
     return data;
   }
 
+  /* Unduh file (blob) dari endpoint API — untuk export Excel rekap. */
+  async function apiDownload(path, filename) {
+    const headers = {};
+    if (state.user) {
+      headers['x-user-id'] = String(state.user.id_user);
+      headers['x-user-role'] = state.user.role;
+    }
+    const res = await fetch(`${API}${path}`, { headers });
+    if (!res.ok) {
+      let data = {};
+      try { data = await res.json(); } catch (_) { /* respons bukan JSON */ }
+      throw new Error(data.error || 'Download gagal');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
   /* ===== Sesi (persist login lewat localStorage) =====
    * Supaya user/admin tidak ter-logout saat refresh browser, data user yang
    * sedang login disimpan di localStorage dan dipulihkan lagi saat halaman dimuat.
@@ -306,6 +330,7 @@
     $('#nav-admin').classList.toggle('hidden', !isAdmin);
     $('#menu-change-email').classList.toggle('hidden', isAdmin);
     $('#menu-preferences').classList.toggle('hidden', isAdmin);
+    $('#menu-recap').classList.toggle('hidden', isAdmin);
 
     // Sembunyikan hero section untuk admin
     const heroSection = $('.hero');
@@ -539,6 +564,127 @@
     }
   }
 
+  /* ===== Riwayat / Recap (User): daftar admin pengupload tugas + progress ===== */
+  function buildModalShell(title, bodyHtml) {
+    const host = $('#modal-host');
+    host.innerHTML = '';
+    stopRingtone();
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'modal recap-modal';
+    modal.innerHTML = `<h3>${title}</h3>${bodyHtml}`;
+    overlay.appendChild(modal);
+    host.appendChild(overlay);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) host.innerHTML = ''; });
+    const closeBtn = $('.modal-dismiss', modal);
+    if (closeBtn) closeBtn.addEventListener('click', () => { host.innerHTML = ''; });
+    return modal;
+  }
+
+  async function openUserRecapModal() {
+    const modal = buildModalShell('Riwayat Tugas Saya', '<p class="recap-loading">Memuat riwayat...</p>');
+    try {
+      const data = await api('/api/recap/summary');
+      const admins = data.admins || [];
+      if (!admins.length) {
+        modal.innerHTML = `
+          <h3>Riwayat Tugas Saya</h3>
+          <p class="recap-empty-state">Belum ada admin yang mengupload tugas. Sabar ya!</p>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary modal-dismiss">Tutup</button>
+          </div>`;
+        const closeBtn = $('.modal-dismiss', modal);
+        if (closeBtn) closeBtn.addEventListener('click', () => { $('#modal-host').innerHTML = ''; });
+        return;
+      }
+      const cards = admins.map((a) => `
+        <li class="recap-admin-card">
+          <div class="recap-admin-info">
+            <div class="recap-admin-name">${escapeHtml(a.nama_admin)}</div>
+            <div class="recap-progress">${a.selesai}/${a.total} Tugas Selesai</div>
+          </div>
+          <button type="button" class="btn-3d btn-3d--sm recap-detail-btn" data-id="${a.id_admin}" data-nama="${escapeHtml(a.nama_admin)}">
+            <span class="button_top">Detail</span>
+          </button>
+        </li>`).join('');
+      modal.innerHTML = `
+        <h3>Riwayat Tugas Saya</h3>
+        <ul class="recap-admin-list">${cards}</ul>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary modal-dismiss">Tutup</button>
+        </div>`;
+      const closeBtn = $('.modal-dismiss', modal);
+      if (closeBtn) closeBtn.addEventListener('click', () => { $('#modal-host').innerHTML = ''; });
+      $$('.recap-detail-btn', modal).forEach((btn) => {
+        btn.addEventListener('click', () => openRiwayatDetailModal(Number(btn.dataset.id), btn.dataset.nama));
+      });
+    } catch (err) {
+      modal.innerHTML = `
+        <h3>Riwayat Tugas Saya</h3>
+        <p class="msg error">${escapeHtml(err.message)}</p>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary modal-dismiss">Tutup</button>
+        </div>`;
+      const closeBtn = $('.modal-dismiss', modal);
+      if (closeBtn) closeBtn.addEventListener('click', () => { $('#modal-host').innerHTML = ''; });
+    }
+  }
+
+  async function openRiwayatDetailModal(idAdmin, namaAdmin) {
+    const modal = buildModalShell(`Riwayat: ${escapeHtml(namaAdmin)}`, '<p class="recap-loading">Memuat detail...</p>');
+    try {
+      const data = await api(`/api/recap/admin/${idAdmin}`);
+      const tugas = data.tugas || [];
+      if (!tugas.length) {
+        modal.innerHTML = `
+          <h3>Riwayat: ${escapeHtml(namaAdmin)}</h3>
+          <p class="recap-empty-state">Belum ada tugas dari admin ini.</p>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary modal-dismiss">Tutup</button>
+          </div>`;
+      } else {
+        const selesai = tugas.filter((t) => t.status === 'Selesai').length;
+        const rows = tugas.map((t) => `
+          <li class="riwayat-item">
+            <div class="riwayat-info">
+              <div class="riwayat-judul">${escapeHtml(t.judul)}</div>
+              <div class="riwayat-meta">${escapeHtml(t.kategori)} &middot; Deadline ${escapeHtml(t.deadline)} &middot; Klik Selesai: ${escapeHtml(t.waktu_selesai)}</div>
+            </div>
+            <span class="riwayat-status ${t.status === 'Selesai' ? 'selesai' : 'terlewat'}">${t.status}</span>
+          </li>`).join('');
+        modal.innerHTML = `
+          <h3>Riwayat: ${escapeHtml(namaAdmin)}</h3>
+          <p class="recap-progress">${selesai}/${tugas.length} Tugas Selesai</p>
+          <ul class="riwayat-list">${rows}</ul>
+          <div class="modal-actions">
+            <button type="button" class="btn-secondary modal-dismiss">Tutup</button>
+            <button type="button" class="btn-3d btn-3d--sm riwayat-export-btn"><span class="button_top">Export Excel Detail</span></button>
+          </div>`;
+        $('.riwayat-export-btn', modal).addEventListener('click', async () => {
+          try {
+            const stamp = new Date().toISOString().slice(0, 10);
+            await apiDownload(`/api/recap/admin/${idAdmin}/export`, `riwayat-tugas-${stamp}.xlsx`);
+            toast('File riwayat udah terunduh.');
+          } catch (err) {
+            toast(humanizeError(err));
+          }
+        });
+      }
+      const closeBtn = $('.modal-dismiss', modal);
+      if (closeBtn) closeBtn.addEventListener('click', () => { $('#modal-host').innerHTML = ''; });
+    } catch (err) {
+      modal.innerHTML = `
+        <h3>Riwayat: ${escapeHtml(namaAdmin)}</h3>
+        <p class="msg error">${escapeHtml(err.message)}</p>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary modal-dismiss">Tutup</button>
+        </div>`;
+      const closeBtn = $('.modal-dismiss', modal);
+      if (closeBtn) closeBtn.addEventListener('click', () => { $('#modal-host').innerHTML = ''; });
+    }
+  }
+
   function closeRecapModal() {
     $('#modal-host').innerHTML = '';
     currentRecapTaskId = null;
@@ -680,6 +826,26 @@
     });
   }
 
+  /* ===== Admin: Rekap & Arsip Semua Tugas (unduh Excel) ===== */
+  const archiveAllBtn = $('#archive-all-btn');
+  if (archiveAllBtn) {
+    archiveAllBtn.addEventListener('click', async () => {
+      const yakin = window.confirm('Apakah Anda yakin ingin menarik semua tugas karena sudah waktunya merekap nilai?');
+      if (!yakin) return;
+      archiveAllBtn.disabled = true;
+      try {
+        const stamp = new Date().toISOString().slice(0, 10);
+        await apiDownload('/api/admin/archive-all', `rekap-semua-tugas-${stamp}.xlsx`);
+        toast('Rekap terunduh. Semua tugas udah ditarik ke arsip.');
+        fetchTasks();
+      } catch (err) {
+        toast(humanizeError(err));
+      } finally {
+        archiveAllBtn.disabled = false;
+      }
+    });
+  }
+
   /* ===== Header Menu (profile-trigger) ===== */
   const trigger = $('#profile-trigger');
   const dropdown = $('#menu-dropdown');
@@ -707,6 +873,9 @@
     switch (action) {
       case 'toggle-theme':
         applyTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark');
+        break;
+      case 'recap':
+        openUserRecapModal();
         break;
       case 'logout':
         stopDeadlineChecker();

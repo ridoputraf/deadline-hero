@@ -1119,6 +1119,94 @@ a { color: var(--primary-hover); }
 /* ===== Modal Rekapitulasi (Admin) ===== */
 .recap-modal { max-width: 460px; }
 
+/* Riwayat / Recap (User): kartu admin pengupload tugas */
+.recap-admin-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.recap-admin-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--soft-bg);
+}
+
+.recap-admin-name {
+  font-weight: 700;
+  color: var(--text-strong);
+  margin-bottom: 2px;
+}
+
+.recap-progress {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.dark .recap-admin-card { background: rgba(248, 247, 255, 0.05); }
+
+.recap-empty-state {
+  color: var(--text-muted);
+  padding: var(--space-4) 0;
+  text-align: center;
+}
+
+.riwayat-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  margin: var(--space-3) 0 var(--space-4);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.riwayat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.riwayat-item:last-child { border-bottom: none; }
+
+.riwayat-judul {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+}
+
+.riwayat-meta {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.riwayat-status {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+}
+
+.riwayat-status.selesai { color: var(--success-dark); background: var(--success-light, rgba(45, 212, 168, 0.16)); }
+.riwayat-status.terlewat { color: var(--uas-deep); background: var(--accent-light, rgba(255, 107, 107, 0.14)); }
+
+.dark .riwayat-status.selesai { color: var(--dark-success); }
+.dark .riwayat-status.terlewat { color: #FF9B9B; }
+
 .recap-loading {
   color: var(--text-muted);
   padding: var(--space-6) 0;

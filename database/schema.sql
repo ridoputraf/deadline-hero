@@ -12,6 +12,7 @@
 -- Nilai yang diizinkan: '/sounds/ringtone1.mp3', '/sounds/ringtone2.mp3', '/sounds/ringtone3.mp3'.
 
 -- Drop sequence & tables (urut dependency)
+DROP TABLE task_completions  CASCADE CONSTRAINTS;
 DROP TABLE notification_log   CASCADE CONSTRAINTS;
 DROP TABLE user_task_status CASCADE CONSTRAINTS;
 DROP TABLE tasks CASCADE CONSTRAINTS;
@@ -54,9 +55,13 @@ CREATE TABLE tasks (
     sumber_web  VARCHAR2(30),
     deadline    TIMESTAMP     NOT NULL,
     created_by  NUMBER        NOT NULL,
+    created_at  TIMESTAMP     DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    is_archived NUMBER(1)     DEFAULT 0 NOT NULL,
+    archived_at TIMESTAMP,
     CONSTRAINT fk_tasks_created_by FOREIGN KEY (created_by) REFERENCES users(id_user),
     CONSTRAINT chk_tasks_kategori CHECK (kategori IN ('Tugas', 'UTS', 'UAS')),
-    CONSTRAINT chk_tasks_sumber   CHECK (sumber_web IN ('Vclass', 'Ilab', 'Praktikum'))
+    CONSTRAINT chk_tasks_sumber   CHECK (sumber_web IN ('Vclass', 'Ilab', 'Praktikum')),
+    CONSTRAINT chk_tasks_archived CHECK (is_archived IN (0, 1))
 );
 
 -- ============================================================
@@ -110,6 +115,42 @@ EXCEPTION
     IF SQLCODE != -2264 THEN RAISE; END IF;
 END;
 /
+
+-- ============================================================
+-- Table: TASK_COMPLETIONS (riwayat klik "Mark As Done" untuk rekap/arsip)
+-- ============================================================
+CREATE TABLE task_completions (
+    id_completion NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) PRIMARY KEY,
+    id_tugas      NUMBER NOT NULL,
+    id_user       NUMBER NOT NULL,
+    completed_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT fk_tc_task FOREIGN KEY (id_tugas) REFERENCES tasks(id_tugas),
+    CONSTRAINT fk_tc_user FOREIGN KEY (id_user) REFERENCES users(id_user),
+    CONSTRAINT uk_tc_task_user UNIQUE (id_tugas, id_user)
+);
+
+CREATE INDEX idx_tc_id_user ON task_completions(id_user);
+
+-- Migrasi DB eksisting (Oracle): tambah kolom arsip jika belum ada
+BEGIN
+  EXECUTE IMMEDIATE 'ALTER TABLE tasks ADD (created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, is_archived NUMBER(1) DEFAULT 0, archived_at TIMESTAMP)';
+EXCEPTION
+  WHEN OTHERS THEN
+    IF SQLCODE != -1430 THEN RAISE; END IF;
+END;
+/
+
+-- Ekuivalen PostgreSQL live (dijalankan otomatis oleh ensureRecapSchema() saat server start):
+--   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE;
+--   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;
+--   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW();
+--   CREATE TABLE IF NOT EXISTS task_completions (
+--       id_completion BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+--       id_tugas      BIGINT NOT NULL REFERENCES tasks(id_tugas) ON DELETE CASCADE,
+--       id_user       BIGINT NOT NULL REFERENCES users(id_user) ON DELETE CASCADE,
+--       completed_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+--       CONSTRAINT uk_task_completions UNIQUE (id_tugas, id_user)
+--   );
 
 -- ============================================================
 -- Table: NOTIFICATION_LOG (anti-spam notifikasi terkirim)

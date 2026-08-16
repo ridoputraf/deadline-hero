@@ -3,6 +3,8 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
+const XLSX = require('xlsx');
+
 const { initPool, getConnection, closePool, sanitizeError, getPool } = require('./db');
 const { startBot, getBotStatus, triggerInstantCheck, runCheck } = require('./bot');
 
@@ -74,6 +76,46 @@ function authRole(...allowedRoles) {
     res.locals.role = role;
     next();
   };
+}
+
+/* ===== Migrasi runtime: skema rekap & arsip =====
+ * Dijalankan sekali saat startup supaya DB live (Supabase/PostgreSQL) otomatis
+ * punya kolom is_archived/archived_at/created_at + tabel task_completions. */
+async function ensureRecapSchema() {
+  const client = await getConnection();
+  try {
+    await client.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP`);
+    await client.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW()`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS task_completions (
+        id_completion BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        id_tugas      BIGINT NOT NULL REFERENCES tasks(id_tugas) ON DELETE CASCADE,
+        id_user       BIGINT NOT NULL REFERENCES users(id_user) ON DELETE CASCADE,
+        completed_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+        CONSTRAINT uk_task_completions UNIQUE (id_tugas, id_user)
+      )`);
+    console.log('Skema rekap & arsip terverifikasi.');
+  } finally {
+    client.release();
+  }
+}
+
+/* Susun workbook Excel dari array of objects (header = key). */
+function buildXlsxBuffer(data, sheetName) {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data.length ? data : [{}]);
+  ws['!cols'] = data.length
+    ? Object.keys(data[0]).map(() => ({ wch: 20 }))
+    : undefined;
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+}
+
+function sendXlsx(res, buffer, filename) {
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  return res.send(buffer);
 }
 
 // =========================================================================
@@ -198,6 +240,7 @@ app.get('/api/tasks', authRole('user', 'admin'), async (req, res) => {
        FROM tasks t
        LEFT JOIN user_task_status uts
          ON uts.id_tugas = t.id_tugas AND uts.id_user = $1
+       WHERE COALESCE(t.is_archived, FALSE) = FALSE
        ORDER BY t.deadline ASC`,
       [res.locals.idUser]
     );
@@ -247,6 +290,168 @@ app.post('/api/tasks', authRole('admin'), async (req, res) => {
     return res.status(201).json({ message: 'Tugas berhasil dibuat', id_tugas: idTugas });
   } catch (err) {
     console.error('CREATE TASK ERR:', sanitizeError(err));
+    return res.status(500).json({ error: 'Terjadi kesalahan server' });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+/* ===== Rekap & Arsip ===== */
+
+/* Admin: tarik semua tugas aktif ke arsip + unduh Excel rekap lengkap
+ * (semua mahasiswa x semua tugas, termasuk yang terarsip). */
+app.post('/api/admin/archive-all', authRole('admin'), async (req, res) => {
+  let client;
+  try {
+    client = await getConnection();
+    const arc = await client.query(
+      `UPDATE tasks SET is_archived = TRUE, archived_at = NOW()
+       WHERE COALESCE(is_archived, FALSE) = FALSE`
+    );
+    console.log(`REKAP: ${arc.rowCount} tugas ditarik ke arsip oleh admin id=${res.locals.idUser}.`);
+
+    const rows = await client.query(
+      `SELECT u.nama AS "mahasiswa",
+              t.judul AS "judul",
+              t.kategori AS "kategori",
+              CASE WHEN COALESCE(uts.status, 'belum') = 'selesai' THEN 'Selesai' ELSE 'Terlewat' END AS "status",
+              a.nama AS "admin_upload",
+              TO_CHAR(t.created_at, 'YYYY-MM-DD HH24:MI') AS "waktu_upload",
+              TO_CHAR(t.deadline, 'YYYY-MM-DD HH24:MI') AS "deadline",
+              COALESCE(TO_CHAR(tc.completed_at, 'YYYY-MM-DD HH24:MI'), '-') AS "waktu_selesai"
+       FROM tasks t
+       JOIN users a ON a.id_user = t.created_by
+       CROSS JOIN users u
+       LEFT JOIN user_task_status uts ON uts.id_tugas = t.id_tugas AND uts.id_user = u.id_user
+       LEFT JOIN task_completions tc ON tc.id_tugas = t.id_tugas AND tc.id_user = u.id_user
+       WHERE u.role = 'user'
+       ORDER BY u.nama ASC, t.deadline ASC`
+    );
+    const data = rows.rows.map((r) => ({
+      'Nama Mahasiswa': r.mahasiswa,
+      'Judul Tugas': r.judul,
+      'Kategori': r.kategori,
+      'Status': r.status,
+      'Admin Upload': r.admin_upload,
+      'Waktu Upload': r.waktu_upload,
+      'Deadline': r.deadline,
+      'Waktu Klik Selesai': r.waktu_selesai,
+    }));
+    const stamp = new Date().toISOString().slice(0, 10);
+    return sendXlsx(res, buildXlsxBuffer(data, 'Rekap Tugas'), `rekap-semua-tugas-${stamp}.xlsx`);
+  } catch (err) {
+    console.error('ARCHIVE-ALL ERR:', sanitizeError(err));
+    return res.status(500).json({ error: 'Terjadi kesalahan server' });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+/* Ambil baris riwayat tugas milik satu admin dari sudut pandang satu mahasiswa. */
+async function getRiwayatRows(client, idAdmin, idUser) {
+  const adminResult = await client.query(
+    `SELECT id_user AS "id_admin", nama AS "nama_admin" FROM users
+     WHERE id_user = $1 AND role = 'admin'`,
+    [idAdmin]
+  );
+  if (adminResult.rows.length === 0) return null;
+
+  const rows = await client.query(
+    `SELECT t.id_tugas AS "id_tugas",
+            t.judul AS "judul",
+            t.kategori AS "kategori",
+            CASE WHEN COALESCE(uts.status, 'belum') = 'selesai' THEN 'Selesai' ELSE 'Terlewat' END AS "status",
+            TO_CHAR(t.deadline, 'YYYY-MM-DD HH24:MI') AS "deadline",
+            COALESCE(TO_CHAR(tc.completed_at, 'YYYY-MM-DD HH24:MI'), '-') AS "waktu_selesai",
+            COALESCE(t.is_archived, FALSE) AS "is_archived"
+     FROM tasks t
+     LEFT JOIN user_task_status uts ON uts.id_tugas = t.id_tugas AND uts.id_user = $2
+     LEFT JOIN task_completions tc ON tc.id_tugas = t.id_tugas AND tc.id_user = $2
+     WHERE t.created_by = $1
+     ORDER BY t.deadline ASC`,
+    [idAdmin, idUser]
+  );
+  return { admin: adminResult.rows[0], tugas: rows.rows };
+}
+
+/* User: ringkasan admin yang pernah upload tugas + progress pengerjaan sendiri. */
+app.get('/api/recap/summary', authRole('user'), async (req, res) => {
+  let client;
+  try {
+    client = await getConnection();
+    const rows = await client.query(
+      `SELECT a.id_user AS "id_admin", a.nama AS "nama_admin",
+              COUNT(t.id_tugas)::int AS "total",
+              COALESCE(SUM(CASE WHEN uts.status = 'selesai' THEN 1 ELSE 0 END), 0)::int AS "selesai"
+       FROM tasks t
+       JOIN users a ON a.id_user = t.created_by AND a.role = 'admin'
+       LEFT JOIN user_task_status uts ON uts.id_tugas = t.id_tugas AND uts.id_user = $1
+       GROUP BY a.id_user, a.nama
+       ORDER BY a.nama ASC`,
+      [res.locals.idUser]
+    );
+    return res.json({ admins: rows.rows });
+  } catch (err) {
+    console.error('RECAP SUMMARY ERR:', sanitizeError(err));
+    return res.status(500).json({ error: 'Terjadi kesalahan server' });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+/* User: rincian riwayat tugas dari satu admin. */
+app.get('/api/recap/admin/:id', authRole('user'), async (req, res) => {
+  const idAdmin = Number(req.params.id);
+  if (isNaN(idAdmin)) {
+    return res.status(400).json({ error: 'ID admin tidak valid' });
+  }
+  let client;
+  try {
+    client = await getConnection();
+    const data = await getRiwayatRows(client, idAdmin, res.locals.idUser);
+    if (!data) return res.status(404).json({ error: 'Admin tidak ditemukan' });
+    return res.json(data);
+  } catch (err) {
+    console.error('RECAP DETAIL ERR:', sanitizeError(err));
+    return res.status(500).json({ error: 'Terjadi kesalahan server' });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+/* User: unduh Excel detail riwayat tugas dari satu admin. */
+app.get('/api/recap/admin/:id/export', authRole('user'), async (req, res) => {
+  const idAdmin = Number(req.params.id);
+  if (isNaN(idAdmin)) {
+    return res.status(400).json({ error: 'ID admin tidak valid' });
+  }
+  let client;
+  try {
+    client = await getConnection();
+    const data = await getRiwayatRows(client, idAdmin, res.locals.idUser);
+    if (!data) return res.status(404).json({ error: 'Admin tidak ditemukan' });
+
+    const me = await client.query(
+      `SELECT nama AS "nama" FROM users WHERE id_user = $1`,
+      [res.locals.idUser]
+    );
+    const namaMahasiswa = me.rows.length ? me.rows[0].nama : '-';
+
+    const rowsOut = data.tugas.map((t) => ({
+      'Nama Mahasiswa': namaMahasiswa,
+      'Judul Tugas': t.judul,
+      'Kategori': t.kategori,
+      'Status': t.status,
+      'Admin Upload': data.admin.nama_admin,
+      'Deadline': t.deadline,
+      'Waktu Klik Selesai': t.waktu_selesai,
+    }));
+    const slug = String(data.admin.nama_admin || 'admin')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'admin';
+    const stamp = new Date().toISOString().slice(0, 10);
+    return sendXlsx(res, buildXlsxBuffer(rowsOut, 'Riwayat Tugas'), `riwayat-tugas-${slug}-${stamp}.xlsx`);
+  } catch (err) {
+    console.error('RECAP EXPORT ERR:', sanitizeError(err));
     return res.status(500).json({ error: 'Terjadi kesalahan server' });
   } finally {
     if (client) client.release();
@@ -369,6 +574,13 @@ app.patch('/api/tasks/:id/done', authRole('user', 'admin'), async (req, res) => 
        DO UPDATE SET status = 'selesai', updated_at = CURRENT_TIMESTAMP`,
       [res.locals.idUser, idTugas]
     );
+    // Riwayat waktu klik "Mark As Done" untuk keperluan rekap/arsip
+    await client.query(
+      `INSERT INTO task_completions (id_tugas, id_user)
+       VALUES ($1, $2)
+       ON CONFLICT (id_tugas, id_user) DO NOTHING`,
+      [idTugas, res.locals.idUser]
+    );
     return res.json({ message: 'Tugas ditandai selesai', id_tugas: idTugas, status: 'selesai' });
   } catch (err) {
     console.error('TOGGLE DONE ERR:', sanitizeError(err), 'id_tugas=', idTugas, 'id_user=', res.locals.idUser);
@@ -483,7 +695,8 @@ async function start() {
   try {
     await initPool();
     console.log('Database connected successfully.');
-    
+    await ensureRecapSchema();
+
     if (process.env.ENABLE_BOT === 'true') {
       startBot();
       console.log('WhatsApp Bot service started.');
