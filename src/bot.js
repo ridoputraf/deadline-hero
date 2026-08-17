@@ -137,14 +137,16 @@ async function getImminentTasks() {
               t.id_tugas AS "id_tugas", t.judul AS "judul", t.kategori AS "kategori",
               t.sumber_web AS "sumber_web",
               TO_CHAR(t.deadline, 'YYYY-MM-DD"T"HH24:MI:SS') AS "deadline"
-       FROM users u
-       CROSS JOIN tasks t
+       FROM tasks t
+       JOIN users creator ON creator.id_user = t.created_by
+       JOIN users u ON u.role = 'user'
+         AND TRIM(COALESCE(u.no_wa, '')) <> ''
        LEFT JOIN user_task_status uts
          ON uts.id_user = u.id_user AND uts.id_tugas = t.id_tugas
        LEFT JOIN notification_log nl
          ON nl.id_user = u.id_user AND nl.id_tugas = t.id_tugas AND nl.jenis = 'wa_h1jam'
-       WHERE u.role = 'user'
-         AND TRIM(COALESCE(u.no_wa, '')) <> ''
+       WHERE creator.role = 'user'
+         AND TRIM(COALESCE(creator.no_wa, '')) <> ''
          AND COALESCE(uts.status, 'belum') != 'selesai'
          AND COALESCE(t.is_archived, FALSE) = FALSE
          AND t.deadline > NOW()
@@ -169,8 +171,8 @@ async function markNotified(conn, idUser, idTugas) {
 
 /* ===== H-1 RELASI: notifikasi ke orang terdekat mahasiswa ===== */
 
-/* Ambil kandidat: tugas H-1 jam, JOIN creator (admin) + user relasi.
- * Relasi = user (role=user) yang punya no_wa valid.
+/* Ambil kandidat: tugas H-1 jam, JOIN creator (user) + user relasi.
+ * Hanya tugas yang dibuat user (role=user) + no_wa valid.
  * Dedup via notification_log jenis 'H-1_RELASI'. */
 async function getRelasiTasks() {
   const conn = await getConnection();
@@ -186,7 +188,9 @@ async function getRelasiTasks() {
          AND TRIM(COALESCE(u.no_wa, '')) <> ''
        LEFT JOIN notification_log nl
          ON nl.id_user = u.id_user AND nl.id_tugas = t.id_tugas AND nl.jenis = 'H-1_RELASI'
-       WHERE COALESCE(t.is_archived, FALSE) = FALSE
+       WHERE creator.role = 'user'
+         AND TRIM(COALESCE(creator.no_wa, '')) <> ''
+         AND COALESCE(t.is_archived, FALSE) = FALSE
          AND t.deadline > NOW()
          AND t.deadline <= NOW() + INTERVAL '60 minutes'
          AND nl.id_notif IS NULL`
