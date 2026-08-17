@@ -95,7 +95,20 @@ async function ensureRecapSchema() {
         completed_at  TIMESTAMP NOT NULL DEFAULT NOW(),
         CONSTRAINT uk_task_completions UNIQUE (id_tugas, id_user)
       )`);
-    console.log('Skema rekap & arsip terverifikasi.');
+    // Tambah jenis 'H-1_RELASI' ke CHECK constraint notification_log
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'chk_nl_jenis'
+        ) THEN
+          ALTER TABLE notification_log DROP CONSTRAINT chk_nl_jenis;
+        END IF;
+      END $$`);
+    await client.query(`
+      ALTER TABLE notification_log ADD CONSTRAINT chk_nl_jenis
+        CHECK (jenis IN ('wa_h1jam', 'ring_h1jam', 'pwa_h1hari', 'H-1_RELASI'))`);
+    console.log('Skema rekap & arsip terverifikasi (H-1_RELASI added).');
   } finally {
     client.release();
   }
