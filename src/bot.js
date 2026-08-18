@@ -177,20 +177,17 @@ async function getImminentTasks() {
               t.sumber_web AS "sumber_web",
               TO_CHAR(t.deadline, 'YYYY-MM-DD"T"HH24:MI:SS') AS "deadline"
        FROM tasks t
-       JOIN users creator ON creator.id_user = t.created_by
        JOIN users u ON u.role = 'user'
-         AND TRIM(COALESCE(u.no_wa, '')) <> ''
+          AND TRIM(COALESCE(u.no_wa, '')) <> ''
        LEFT JOIN user_task_status uts
-         ON uts.id_user = u.id_user AND uts.id_tugas = t.id_tugas
+          ON uts.id_user = u.id_user AND uts.id_tugas = t.id_tugas
        LEFT JOIN notification_log nl
-         ON nl.id_user = u.id_user AND nl.id_tugas = t.id_tugas AND nl.jenis = 'wa_h1jam'
-       WHERE creator.role = 'user'
-         AND TRIM(COALESCE(creator.no_wa, '')) <> ''
-         AND COALESCE(uts.status, 'belum') != 'selesai'
-         AND COALESCE(t.is_archived, FALSE) = FALSE
-         AND t.deadline > NOW()
-         AND t.deadline <= NOW() + INTERVAL '60 minutes'
-         AND nl.id_notif IS NULL`
+          ON nl.id_user = u.id_user AND nl.id_tugas = t.id_tugas AND nl.jenis = 'wa_h1jam'
+       WHERE COALESCE(uts.status, 'belum') != 'selesai'
+          AND COALESCE(t.is_archived, FALSE) = FALSE
+          AND t.deadline > NOW()
+          AND t.deadline <= NOW() + INTERVAL '60 minutes'
+          AND nl.id_notif IS NULL`
     );
     return result.rows;
   } finally {
@@ -224,15 +221,13 @@ async function getRelasiTasks() {
        FROM tasks t
        JOIN users creator ON creator.id_user = t.created_by
        JOIN users u ON u.role = 'user'
-         AND TRIM(COALESCE(u.no_wa, '')) <> ''
+          AND TRIM(COALESCE(u.no_wa, '')) <> ''
        LEFT JOIN notification_log nl
-         ON nl.id_user = u.id_user AND nl.id_tugas = t.id_tugas AND nl.jenis = 'H-1_RELASI'
-       WHERE creator.role = 'user'
-         AND TRIM(COALESCE(creator.no_wa, '')) <> ''
-         AND COALESCE(t.is_archived, FALSE) = FALSE
-         AND t.deadline > NOW()
-         AND t.deadline <= NOW() + INTERVAL '60 minutes'
-         AND nl.id_notif IS NULL`
+          ON nl.id_user = u.id_user AND nl.id_tugas = t.id_tugas AND nl.jenis = 'H-1_RELASI'
+       WHERE COALESCE(t.is_archived, FALSE) = FALSE
+          AND t.deadline > NOW()
+          AND t.deadline <= NOW() + INTERVAL '60 minutes'
+          AND nl.id_notif IS NULL`
     );
     return result.rows;
   } finally {
