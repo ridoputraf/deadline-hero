@@ -171,6 +171,10 @@ function buildMessage(t) {
 async function getImminentTasks() {
   const conn = await getConnection();
   try {
+    // Tambahkan log untuk mengecek waktu server PostgreSQL
+    const timeCheck = await conn.query(`SELECT NOW() AS db_now, NOW() AT TIME ZONE 'Asia/Jakarta' AS db_wib`);
+    console.log(`[WA BOT DEBUG] Waktu DB UTC: ${timeCheck.rows[0].db_now} | WIB: ${timeCheck.rows[0].db_wib}`);
+
     const result = await conn.query(
       `SELECT u.id_user AS "id_user", u.nama AS "nama", u.no_wa AS "no_wa", u.relasi AS "relasi",
               t.id_tugas AS "id_tugas", t.judul AS "judul", t.kategori AS "kategori",
@@ -178,17 +182,16 @@ async function getImminentTasks() {
               TO_CHAR(t.deadline, 'YYYY-MM-DD"T"HH24:MI:SS') AS "deadline"
        FROM tasks t
        JOIN users u ON u.role = 'user'
-          AND TRIM(COALESCE(u.no_wa, '')) <> ''
        LEFT JOIN user_task_status uts
           ON uts.id_user = u.id_user AND uts.id_tugas = t.id_tugas
        LEFT JOIN notification_log nl
           ON nl.id_user = u.id_user AND nl.id_tugas = t.id_tugas AND nl.jenis = 'wa_h1jam'
        WHERE COALESCE(uts.status, 'belum') != 'selesai'
           AND COALESCE(t.is_archived, FALSE) = FALSE
-          AND t.deadline > NOW()
-          AND t.deadline <= NOW() + INTERVAL '60 minutes'
           AND nl.id_notif IS NULL`
     );
+    
+    console.log(`[WA BOT DEBUG] Total kandidat dari SQL: ${result.rows.length}`);
     return result.rows;
   } finally {
     conn.release();
