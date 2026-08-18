@@ -222,9 +222,12 @@ async function getRelasiTasks() {
        JOIN users creator ON creator.id_user = t.created_by
        JOIN users u ON u.role = 'user'
           AND TRIM(COALESCE(u.no_wa, '')) <> ''
+       LEFT JOIN user_task_status uts
+          ON uts.id_user = u.id_user AND uts.id_tugas = t.id_tugas
        LEFT JOIN notification_log nl
           ON nl.id_user = u.id_user AND nl.id_tugas = t.id_tugas AND nl.jenis = 'H-1_RELASI'
-       WHERE COALESCE(t.is_archived, FALSE) = FALSE
+       WHERE COALESCE(uts.status, 'belum') != 'selesai'
+          AND COALESCE(t.is_archived, FALSE) = FALSE
           AND t.deadline > (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '5 minutes'
           AND t.deadline <= (NOW() AT TIME ZONE 'Asia/Jakarta') + INTERVAL '60 minutes'
           AND nl.id_notif IS NULL`
