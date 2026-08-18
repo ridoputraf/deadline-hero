@@ -10,13 +10,45 @@ let ready = false;
 let qrDataUrl = null;
 
 // Menentukan path volume persistent Railway atau lokal
+// 1. Menentukan path volume persistent Railway atau lokal
 const SESSION_PATH = process.env.RAILWAY_VOLUME_MOUNT_PATH 
   || path.join(__dirname, '..', '.wwebjs_auth');
 
+// 2. FUNGSI PEMBERSIH LOCK PADA VOLUME (Wajib sebelum new Client)
+function cleanChromiumLocks(dir) {
+  if (!fs.existsSync(dir)) return;
+  try {
+    const files = fs.readdirSync(dir, { withFileTypes: true });
+    for (const file of files) {
+      const fullPath = path.join(dir, file.name);
+      if (file.isDirectory()) {
+        cleanChromiumLocks(fullPath);
+      } else if (
+        file.name === 'SingletonLock' || 
+        file.name === 'SingletonCookie' || 
+        file.name === 'SingletonSocket'
+      ) {
+        try {
+          fs.unlinkSync(fullPath);
+          console.log(`[WA BOT] Berhasil menghapus file pengunci Chromium: ${fullPath}`);
+        } catch (err) {
+          console.error(`[WA BOT] Gagal menghapus file pengunci ${fullPath}:`, err.message);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[WA BOT] Gagal pembersihan direktori:', e.message);
+  }
+}
+
+// Jalankan pembersihan langsung di awal sebelum Puppeteer start
+cleanChromiumLocks(SESSION_PATH);
+
+// 3. Inisialisasi WhatsApp Client
 const client = new Client({
   authStrategy: new LocalAuth({
     clientId: 'deadlinehero',
-    dataPath: SESSION_PATH // <-- WAJIB DITAMBAHKAN AGAR DISIMPAN KE RAILWAY VOLUME
+    dataPath: SESSION_PATH
   }),
   puppeteer: {
     headless: true,
