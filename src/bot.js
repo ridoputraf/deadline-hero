@@ -9,8 +9,15 @@ const { getConnection, sanitizeError } = require('./db');
 let ready = false;
 let qrDataUrl = null;
 
+// Menentukan path volume persistent Railway atau lokal
+const SESSION_PATH = process.env.RAILWAY_VOLUME_MOUNT_PATH 
+  || path.join(__dirname, '..', '.wwebjs_auth');
+
 const client = new Client({
-  authStrategy: new LocalAuth({ clientId: 'deadlinehero' }),
+  authStrategy: new LocalAuth({
+    clientId: 'deadlinehero',
+    dataPath: SESSION_PATH // <-- WAJIB DITAMBAHKAN AGAR DISIMPAN KE RAILWAY VOLUME
+  }),
   puppeteer: {
     headless: true,
     args: [
