@@ -386,12 +386,10 @@ function startBot() {
 
   client.initialize();
 
-  // Cron tiap 1 menit: cek mandiri dari DB, tidak bergantung sesi login frontend.
-  cron.schedule('* * * * *', () => {
-    console.log('[WA BOT] cron cek deadline H-1 jam...');
+  cron.schedule('*/10 * * * *', () => {
+    console.log('[WA BOT] cron (tiap 10 menit) cek deadline H-1 jam...');
     runCheck().catch((err) => console.error('[WA BOT] cron error:', err));
     runRelasiCheck().catch((err) => console.error('[WA BOT] cron relasi error:', err));
   });
-}
 
 module.exports = { startBot, runCheck, runRelasiCheck, triggerInstantCheck, client, getBotStatus };
