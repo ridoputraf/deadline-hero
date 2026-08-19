@@ -22,6 +22,34 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
+  /* ===== Nomor WhatsApp: auto-prefix +62 & pembersihan format lokal =====
+   * Input di UI cuma nampung angka lokal tanpa "0"/"62" di depan (badge "+62"
+   * yang nempel di sebelah input udah mewakili kode negaranya). Tapi orang
+   * suka paste nomor lengkap (mis. "08123..." atau "+62812...") apa adanya,
+   * jadi tetap dibersihin di titik pemakaian biar hasil akhirnya konsisten
+   * "628xxxxxxxxxx" — format yang sama persis dipakai bot.js buat kirim WA.
+   */
+  function waLocalDigits(raw) {
+    // Ambil angka doang, lalu buang kode negara/awalan "0" kalau kepencet ikut ke-paste.
+    let d = String(raw || '').replace(/\D/g, '');
+    if (d.startsWith('62')) d = d.slice(2);
+    else if (d.startsWith('0')) d = d.slice(1);
+    return d;
+  }
+  function waFullNumber(raw) {
+    const d = waLocalDigits(raw);
+    return d ? '62' + d : null;
+  }
+  // Nempel ke input nomor WA: sambil ngetik, otomatis buang "0"/"62" nyasar
+  // biar yang keliatan di kolom cuma angka lokal setelah badge "+62".
+  function attachWaAutoClean(input) {
+    if (!input) return;
+    input.addEventListener('input', () => {
+      const cleaned = waLocalDigits(input.value);
+      if (cleaned !== input.value) input.value = cleaned;
+    });
+  }
+
   /* ===== Theme ===== */
   function applyTheme(mode) {
     document.documentElement.classList.toggle('dark', mode === 'dark');
@@ -50,7 +78,7 @@
       const { src, id, judul } = pendingRingtone;
       pendingRingtone = null;
       playRingtone(src);
-      activeAlarmTaskId = id; // lacak tugas yang sedang membunyikan alarm (utk auto-stop, lihat scanDeadlineAlerts)
+      setActiveAlarmTaskId(id); // lacak tugas yang sedang membunyikan alarm (utk auto-stop, lihat scanDeadlineAlerts)
       markRung(id);
       toast(`Psst, "${judul}" mepet deadline-nya. Gas kerjain!`);
     }
@@ -68,6 +96,29 @@
   // id_tugas yang sedang membunyikan alarm deadline saat ini (bukan "Tes Suara" biasa).
   // Dipakai scanDeadlineAlerts() untuk tahu kapan harus auto-stop (deadline lewat / tugas selesai).
   let activeAlarmTaskId = null;
+
+  /* ===== Persist state alarm ke sessionStorage =====
+   * Supaya alarm yang sedang bunyi tidak "hilang tanpa jejak" kalau
+   * halaman di-refresh — begitu app reload, kita cek balik id tugas yang
+   * masih nyalain alarm dan langsung lanjutkan (bukan dianggap sudah beres).
+   */
+  const ALARM_SESSION_KEY = 'dlh-active-alarm-id';
+  function persistActiveAlarm(id) {
+    try {
+      if (id === null || id === undefined) sessionStorage.removeItem(ALARM_SESSION_KEY);
+      else sessionStorage.setItem(ALARM_SESSION_KEY, String(id));
+    } catch (_) { /* storage diblokir, alarm cukup jalan in-memory */ }
+  }
+  function readPersistedAlarm() {
+    try {
+      const v = sessionStorage.getItem(ALARM_SESSION_KEY);
+      return v ? Number(v) : null;
+    } catch (_) { return null; }
+  }
+  function setActiveAlarmTaskId(id) {
+    activeAlarmTaskId = id;
+    persistActiveAlarm(id);
+  }
 
   function stopRingtone() {
     if (activeAudio) {
@@ -236,6 +287,7 @@
   if (prefSelect) prefSelect.addEventListener('change', syncPreferensiVisibility);
   // Sync awal: default 'nada_dering' → tampilkan ringtone-extra
   syncPreferensiVisibility();
+  attachWaAutoClean($('#register-form input[name="no_wa"]'));
 
   /* ===== Login ===== */
   $('#login-form').addEventListener('submit', async (e) => {
@@ -273,12 +325,13 @@
       return;
     }
 
-    // Nomor WA wajib valid kalau preferensinya nomor_wa
+    // Nomor WA wajib valid kalau preferensinya nomor_wa (angka lokal setelah badge +62)
+    const waFull = preferensi === 'nomor_wa' ? waFullNumber(f.no_wa.value) : null;
     if (preferensi === 'nomor_wa') {
-      const wa = f.no_wa.value.trim().replace(/[\s-]/g, '');
-      if (!/^[0-9+]{9,16}$/.test(wa)) {
+      const localDigits = waLocalDigits(f.no_wa.value);
+      if (localDigits.length < 8 || localDigits.length > 14) {
         msg.className = 'msg error';
-        msg.textContent = 'Nomor WhatsApp-nya kelihatannya belum lengkap. Tulis 9-15 digit angka ya!';
+        msg.textContent = 'Nomor WhatsApp-nya kelihatannya belum lengkap. Tulis 8-14 digit angka ya!';
         f.no_wa.focus();
         return;
       }
@@ -295,7 +348,7 @@
           email: f.email.value.trim(),
           password: f.password.value,
           preferensi,
-          no_wa: preferensi === 'nomor_wa' ? f.no_wa.value.trim() : null,
+          no_wa: waFull,
           relasi,
           selected_ringtone: selectedRingtone,
         }),
@@ -473,22 +526,22 @@
       const deskripsi = t.deskripsi
         ? `<div class="task-desc">${escapeHtml(t.deskripsi)}</div>` : '';
 
+      // Tombol aksi (Detail utk admin, Mark As Done utk user) berlaku sama
+      // di semua kategori — Tugas, UTS, maupun UAS.
       let actionBtn = '';
-      if (state.activeTab === 'Tugas') {
-        if (isAdmin) {
-          // Admin tidak menandai tugas selesai sendiri, cukup melihat rekap pengerjaan mahasiswa
-          actionBtn = `<button class="btn-3d btn-3d--sm" data-id="${t.id}" data-judul="${escapeHtml(t.judul)}" data-createdby="${t.created_by ?? ''}" type="button"><span class="button_top">Detail</span></button>`;
-        } else {
-          const deadlineMs = new Date(t.deadline).getTime();
-          const isExpired = !isNaN(deadlineMs) && deadlineMs < Date.now();
+      if (isAdmin) {
+        // Admin tidak menandai tugas selesai sendiri, cukup melihat rekap pengerjaan mahasiswa
+        actionBtn = `<button class="btn-3d btn-3d--sm" data-id="${t.id}" data-judul="${escapeHtml(t.judul)}" data-createdby="${t.created_by ?? ''}" type="button"><span class="button_top">Detail</span></button>`;
+      } else {
+        const deadlineMs = new Date(t.deadline).getTime();
+        const isExpired = !isNaN(deadlineMs) && deadlineMs < Date.now();
 
-          if (done) {
-            actionBtn = `<button class="btn-3d btn-3d--sm btn-3d--done done" type="button" disabled><span class="button_top">Selesai</span></button>`;
-          } else if (isExpired) {
-            actionBtn = `<button class="btn-3d btn-3d--sm btn-3d--done missed" type="button" disabled><span class="button_top">Terlewat</span></button>`;
-          } else {
-            actionBtn = `<button class="btn-3d btn-3d--sm btn-3d--done" data-id="${t.id}" type="button"><span class="button_top">Mark As Done</span></button>`;
-          }
+        if (done) {
+          actionBtn = `<button class="btn-3d btn-3d--sm btn-3d--done done" type="button" disabled><span class="button_top">Selesai</span></button>`;
+        } else if (isExpired) {
+          actionBtn = `<button class="btn-3d btn-3d--sm btn-3d--done missed" type="button" disabled><span class="button_top">Terlewat</span></button>`;
+        } else {
+          actionBtn = `<button class="btn-3d btn-3d--sm btn-3d--done" data-id="${t.id}" type="button"><span class="button_top">Mark As Done</span></button>`;
         }
       }
 
@@ -761,10 +814,15 @@
   }
 
   async function toggleDone(id) {
-    // Hentikan nada dering yang mungkin sedang berbunyi untuk tugas ini
-    stopRingtone();
-    pendingRingtone = null;
-    activeAlarmTaskId = null;
+    // Cuma hentikan nada dering kalau tugas yang baru ditandai selesai ini
+    // yang lagi bunyi — tugas lain (kategori lain) yang masih mepet deadline
+    // harus tetap ngingetin. Alarm baru benar-benar diam kalau semua tugas
+    // aktif sudah "selesai" (dicek lagi lewat scanDeadlineAlerts di bawah).
+    if (pendingRingtone && pendingRingtone.id === id) pendingRingtone = null;
+    if (activeAlarmTaskId === id) {
+      stopRingtone();
+      setActiveAlarmTaskId(null);
+    }
 
     // Optimistic: flip state lokal + re-render langsung biar UI responsif
     const applyOptimistic = (status) => {
@@ -780,6 +838,9 @@
       return false;
     };
     applyOptimistic('selesai');
+    // Langsung re-scan: kalau masih ada tugas lain (kategori lain juga)
+    // yang mepet deadline & belum ditandai, alarm lanjut jalan buat itu.
+    scanDeadlineAlerts();
 
     try {
       const data = await api(`/api/tasks/${id}/done`, { method: 'PATCH' });
@@ -922,7 +983,7 @@
         });
         break;
       case 'preferences':
-        openModal('Preferensi Pengingat', [
+        openModal('Ganti Pengingat', [
           {
             name: 'preferensi', type: 'select', label: 'Preferensi',
             value: state.user ? state.user.preferensi : 'nada_dering',
@@ -931,7 +992,11 @@
               { value: 'nomor_wa', label: 'Nomor WhatsApp Orang Terdekat' },
             ],
           },
-          { name: 'no_wa', type: 'tel', label: 'Nomor WhatsApp (jika Nomor WA)', value: state.user ? (state.user.no_wa || '') : '' },
+          {
+            name: 'no_wa', type: 'tel', label: 'Nomor WhatsApp (jika Nomor WA)', prefix: '+62',
+            placeholder: '81234567890',
+            value: state.user ? waLocalDigits(state.user.no_wa || '') : '',
+          },
           {
             name: 'relasi', type: 'select', label: 'Hubungan Kontak',
             value: state.user ? state.user.relasi : '',
@@ -998,7 +1063,16 @@
         }
         return `<label>${f.label}${selectHtml}</label>`;
       }
-      return `<label>${f.label}<input type="${f.type}" name="${f.name}" value="${curVal}" ${f.required ? 'required' : ''} /></label>`;
+      const inputHtml = `<input type="${f.type}" name="${f.name}" value="${curVal}" ${f.required ? 'required' : ''} ${f.placeholder ? `placeholder="${f.placeholder}"` : ''} />`;
+      if (f.prefix) {
+        return `<label>${f.label}
+          <div class="wa-input-group">
+            <span class="wa-prefix">${f.prefix}</span>
+            ${inputHtml}
+          </div>
+        </label>`;
+      }
+      return `<label>${f.label}${inputHtml}</label>`;
     }).join('');
 
     modal.innerHTML = `
@@ -1044,6 +1118,8 @@
       });
     });
 
+    attachWaAutoClean($('input[name="no_wa"]', modal));
+
     // Dynamic visibility: jika ada field `selected_ringtone` + `preferensi`,
     // tampilkan/sembunyikan row ringtone berdasarkan nilai preferensi.
    // Dynamic visibility: tampilkan/sembunyikan field berdasarkan preferensi
@@ -1079,7 +1155,11 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const vals = {};
-      $$('[name]', form).forEach((el) => { vals[el.name] = el.value.trim(); });
+      $$('[name]', form).forEach((el) => {
+        // Nomor WA disimpan penuh dengan kode negara (628xxxxxxxxxx), meskipun
+        // yang keliatan di kolom cuma angka lokal setelah badge "+62".
+        vals[el.name] = el.name === 'no_wa' ? (waFullNumber(el.value) || '') : el.value.trim();
+      });
       try {
         await onSubmit(vals);
         close();
@@ -1143,6 +1223,15 @@
     }
     return false; // tugas tidak ditemukan lagi (mis. dihapus admin)
   }
+  function findTaskById(id) {
+    for (const k of Object.keys(state.tasks)) {
+      for (const raw of state.tasks[k]) {
+        const t = normTask(raw);
+        if (t.id === id) return t;
+      }
+    }
+    return null;
+  }
 
   /* ===== checkUrgentTasksAndPlayRingtone =====
    * Inti alarm: cari tugas berstatus "belum" dengan deadline < 1 jam dari
@@ -1177,7 +1266,7 @@
         }
 
         playRingtone(src);
-        activeAlarmTaskId = t.id;
+        setActiveAlarmTaskId(t.id);
         markRung(t.id);
         toast(`Psst, "${t.judul}" kurang dari 1 jam lagi. Gas kerjain!`);
         return t;
@@ -1185,6 +1274,10 @@
     }
     return null;
   }
+
+  // Sudah dicoba resume alarm dari sessionStorage sekali sejak halaman dimuat?
+  // (cukup sekali — kalau user sudah stop manual, jangan dipaksa nyala lagi)
+  let alarmResumeChecked = false;
 
   function scanDeadlineAlerts() {
     const u = state.user;
@@ -1194,7 +1287,7 @@
     if (!u || u.role !== 'user' || u.preferensi !== 'nada_dering') {
       if (activeAlarmTaskId !== null) {
         stopRingtone();
-        activeAlarmTaskId = null;
+        setActiveAlarmTaskId(null);
       }
       pendingRingtone = null;
       return;
@@ -1202,11 +1295,36 @@
 
     const now = Date.now();
 
-    // (3) Jika tugas yang SEDANG berbunyi kini sudah "Terlewat" atau ditandai selesai,
-    // hentikan audio secara otomatis alih-alih terus berbunyi.
+    // Resume setelah refresh: kalau sessionStorage nyimpen id alarm yang lagi
+    // bunyi sebelum halaman di-reload, dan tugasnya masih valid (belum
+    // selesai/lewat), lanjutkan alarm itu — jangan anggap sudah beres cuma
+    // gara-gara variabel in-memory-nya kereset.
+    if (!alarmResumeChecked) {
+      alarmResumeChecked = true;
+      const persistedId = readPersistedAlarm();
+      if (persistedId !== null && activeAlarmTaskId === null && isAlarmStillValid(persistedId, now)) {
+        const t = findTaskById(persistedId);
+        if (t) {
+          const src = u.selected_ringtone || DEFAULT_RINGTONE;
+          activeAlarmTaskId = persistedId; // set langsung, persist lagi di bawah lewat playRingtone/pending
+          if (userInteracted) {
+            playRingtone(src);
+            persistActiveAlarm(persistedId);
+          } else {
+            pendingRingtone = { src, id: persistedId, judul: t.judul };
+          }
+        }
+      }
+    }
+
+    // (3) Kalau tugas yang SEDANG berbunyi kini sudah "Terlewat" atau ditandai
+    // selesai, hentikan alarm-nya SAJA (bukan mematikan alarm untuk kategori
+    // lain) — checkUrgentTasksAndPlayRingtone di bawah otomatis lanjut cari
+    // tugas mepet lain yang belum ditandai. Audio hanya benar-benar diam
+    // begitu tidak ada lagi kandidat tersisa (di semua kategori: Tugas/UTS/UAS).
     if (activeAlarmTaskId !== null && !isAlarmStillValid(activeAlarmTaskId, now)) {
       stopRingtone();
-      activeAlarmTaskId = null;
+      setActiveAlarmTaskId(null);
     }
 
     checkUrgentTasksAndPlayRingtone(state.tasks, u.selected_ringtone);
@@ -1220,7 +1338,8 @@
   function stopDeadlineChecker() {
     if (checkerTimer) { clearInterval(checkerTimer); checkerTimer = null; }
     stopRingtone();
-    activeAlarmTaskId = null;
+    setActiveAlarmTaskId(null);
+    alarmResumeChecked = false; // logout/reset — sesi berikutnya boleh resume lagi kalau perlu
   }
 
   /* ===== Utils ===== */
@@ -1260,13 +1379,6 @@
     return d.toLocaleString('id-ID', {
       day: '2-digit', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
-    });
-  }
-
-  /* ===== Service Worker ===== */
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch((err) => console.warn('SW reg failed:', err));
     });
   }
 

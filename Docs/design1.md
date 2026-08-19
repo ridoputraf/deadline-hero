@@ -1,6 +1,10 @@
 # DeadLineHero — Design System
 
-> **Changelog dari draf sebelumnya:** dokumen ini memperbaiki 5 masalah — (1) kontras warna yang gagal WCAG AA, (2) terlalu banyak warna "tier utama" tanpa hierarki, (3) gradient progress bar yang bentrok makna dengan status warna, (4) kosakata emoji yang tidak dibatasi, (5) belum ada spacing/grid system. Semua nilai kontras di bawah dihitung aktual (formula WCAG 2.1 relative luminance), bukan perkiraan.
+> **Changelog:** dokumen ini mengalami 3 putaran revisi besar.
+>
+> - **R1:** Perbaiki kontras WCAG AA, hierarki warna, gradient vs status, spacing system.
+> - **R2:** Tambah zero-emoji policy, sesuaikan tombol dengan sistem `btn-3d` Neubrutalism aktual.
+> - **R3 (saat ini):** Platform dikoreksi ke murni **Responsive Web Application** (bukan PWA — tidak ada manifest/service worker). Tambah dokumentasi sistem tombol `btn-3d` (layer base + `.button_top`), flip card 3D auth, dan catatan implementasi aktual dari `style.css`.
 
 ## 1. Design Concept
 
@@ -10,11 +14,19 @@ DeadLineHero dirancang bukan hanya sebagai aplikasi pencatat deadline, tetapi se
 
 Desain harus memberikan perasaan:
 
-- 😄 Menyenangkan dan optimistis
-- ⚡ Berenergi tanpa terasa agresif
-- 🧠 Membantu pengguna tetap fokus
-- 🎯 Membuat tugas terasa lebih mudah dikelola
-- 🦸 Memberikan kesan bahwa pengguna mampu menaklukkan deadline
+- Menyenangkan dan optimistis
+- Berenergi tanpa terasa agresif
+- Membantu pengguna tetap fokus
+- Membuat tugas terasa lebih mudah dikelola
+- Memberikan kesan bahwa pengguna mampu menaklukkan deadline
+
+### Platform: Responsive Web Application (RWA)
+
+DeadLineHero adalah **murni Responsive Web Application**. Bukan PWA. Tidak ada `manifest.json`, tidak ada service worker, tidak ada fitur install/offline. Aplikasi selalu jalan online. Responsif via CSS breakpoints (640px, 841px). Bottom navigation di mobile, layout lebar di desktop.
+
+### Zero-Emoji Policy
+
+UI DeadLineHero **tidak menggunakan emoji sama sekali**. Identitas visual dibangun sepenuhnya melalui hierarki warna, tipografi, dan label teks. Tidak ada emoji di heading, tombol, badge, status, microcopy, atau komponen apapun. Kode frontend (HTML/JS/CSS) dan pesan server semuanya bebas emoji.
 
 Hindari warna pastel generik yang pucat dan monoton. Gunakan kombinasi warna cerah, hangat, dan modern — tapi **setiap warna yang membawa teks harus lolos kontras WCAG AA (≥4.5:1 untuk teks normal, ≥3:1 untuk teks besar/UI component)**. Ini bukan preferensi estetika, ini syarat lolos/gagal sebelum kode di-ship.
 

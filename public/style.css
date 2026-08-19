@@ -339,6 +339,41 @@ a { color: var(--primary-hover); }
 
 .auth-form input::placeholder { color: var(--text-muted); opacity: 0.85; }
 
+/* Grup input nomor WhatsApp dengan badge kode negara "+62" nempel di kiri */
+.wa-input-group {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.wa-input-group .wa-prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 2px solid var(--nb-border);
+  border-right: none;
+  border-radius: 10px 0 0 10px;
+  background: var(--soft-bg);
+  font-weight: 700;
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+.wa-input-group input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 0 10px 10px 0 !important;
+  box-shadow: none !important;
+}
+.modal .wa-input-group .wa-prefix {
+  border: 1.5px solid var(--line);
+  border-right: none;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: var(--soft-bg);
+  font-weight: 600;
+}
+.modal .wa-input-group input {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0 !important;
+}
+
 /* Field kondisional (WA / nada dering) di dalam face belakang */
 #wa-extra,
 #ringtone-extra {

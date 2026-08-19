@@ -1,9 +1,15 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const bcrypt = require('bcrypt');
 require('dotenv').config();
 
 const XLSX = require('xlsx');
+
+const BCRYPT_ROUNDS = 10;
+// Hash bcrypt selalu berformat "$2a$"/"$2b$"/"$2y$..." — dipakai buat
+// bedain akun lama (password plaintext) vs akun yang udah di-hash.
+const isBcryptHash = (v) => typeof v === 'string' && /^\$2[aby]\$/.test(v);
 
 const { initPool, getConnection, closePool, sanitizeError, getPool } = require('./db');
 const { startBot, getBotStatus, triggerInstantCheck, runCheck } = require('./bot');
@@ -188,11 +194,12 @@ app.post('/api/auth/register', async (req, res) => {
         : DEFAULT_RINGTONE;
     }
 
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const result = await client.query(
       `INSERT INTO users (npm, nama, email, password, role, no_wa, preferensi, relasi, selected_ringtone)
        VALUES ($1, $2, $3, $4, 'user', $5, $6, $7, $8)
        RETURNING id_user`,
-      [npm, nama, email, password, resolvedNoWa, preferensi, resolvedRelasi, resolvedRingtone]
+      [npm, nama, email, hashedPassword, resolvedNoWa, preferensi, resolvedRelasi, resolvedRingtone]
     );
     const idUser = result.rows[0].id_user;
     // Mahasiswa baru: cek instan apakah ada tugas lama yang deadlinenya sudah H-1 jam
@@ -217,20 +224,42 @@ app.post('/api/auth/login', async (req, res) => {
     client = await getConnection();
     const result = await client.query(
       `SELECT id_user AS "id_user", npm AS "npm", nama AS "nama", email AS "email",
-              role AS "role", no_wa AS "no_wa", preferensi AS "preferensi", relasi AS "relasi",
+              password AS "password", role AS "role", no_wa AS "no_wa",
+              preferensi AS "preferensi", relasi AS "relasi",
               COALESCE(selected_ringtone, '${DEFAULT_RINGTONE}') AS "selected_ringtone"
-       FROM users WHERE email = $1 AND password = $2`,
-      [email, password]
+       FROM users WHERE email = $1`,
+      [email]
     );
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Email atau password salah' });
     }
-    
-    let userData = result.rows[0];
+
+    const row = result.rows[0];
+    const storedHash = row.password;
+    let valid = false;
+
+    if (isBcryptHash(storedHash)) {
+      valid = await bcrypt.compare(password, storedHash);
+    } else {
+      // Akun lama dari sebelum migrasi bcrypt: password masih plaintext.
+      // Cocokkan langsung, lalu diam-diam upgrade ke hash biar aman ke depannya.
+      valid = storedHash === password;
+      if (valid) {
+        const newHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+        await client.query('UPDATE users SET password = $1 WHERE id_user = $2', [newHash, row.id_user]);
+      }
+    }
+
+    if (!valid) {
+      return res.status(401).json({ error: 'Email atau password salah' });
+    }
+
+    let userData = { ...row };
+    delete userData.password;
     if (userData.selected_ringtone) {
       userData.selected_ringtone = userData.selected_ringtone.replace('/sounds/', '/Sounds/');
     }
-    
+
     return res.json({ message: 'Login berhasil', user: userData });
   } catch (err) {
     console.error('LOGIN ERR:', sanitizeError(err));
@@ -606,10 +635,10 @@ app.patch('/api/tasks/:id/done', authRole('user', 'admin'), async (req, res) => 
     }
 
     await client.query(
-      `INSERT INTO user_task_status (id_user, id_tugas, status, updated_at)
-       VALUES ($1, $2, 'selesai', CURRENT_TIMESTAMP)
+      `INSERT INTO user_task_status (id_user, id_tugas, status, completed_at, updated_at)
+       VALUES ($1, $2, 'selesai', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
        ON CONFLICT (id_user, id_tugas)
-       DO UPDATE SET status = 'selesai', updated_at = CURRENT_TIMESTAMP`,
+       DO UPDATE SET status = 'selesai', completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP`,
       [res.locals.idUser, idTugas]
     );
     // Riwayat waktu klik "Mark As Done" untuk keperluan rekap/arsip
@@ -637,9 +666,10 @@ app.patch('/api/auth/change-password', authRole('user', 'admin'), async (req, re
   let client;
   try {
     client = await getConnection();
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
     await client.query(
       `UPDATE users SET password = $1 WHERE id_user = $2`,
-      [password, res.locals.idUser]
+      [hashedPassword, res.locals.idUser]
     );
     return res.json({ message: 'Password diperbarui' });
   } catch (err) {

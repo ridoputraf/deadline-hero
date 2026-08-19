@@ -6,7 +6,6 @@
   <meta name="theme-color" content="#6C3BFF" />
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171525" />
   <title>DeadLineHero</title>
-  <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -61,7 +60,10 @@
               </label>
               <div id="wa-extra" class="hidden">
                 <label>Nomor WhatsApp-nya
-                  <input type="tel" name="no_wa" placeholder="Contoh: 081234567890" autocomplete="tel" />
+                  <div class="wa-input-group">
+                    <span class="wa-prefix">+62</span>
+                    <input type="tel" name="no_wa" placeholder="81234567890" autocomplete="tel" />
+                  </div>
                 </label>
                 <label>Dia siapa buat kamu?
                   <select name="relasi">
